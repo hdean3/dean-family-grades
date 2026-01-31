@@ -1,0 +1,49 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Parse_Grade_Email": {
+                "inputs": {
+                    "content": "@triggerBody()?['Body']",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "grades": { "type": "array" }
+                        }
+                    }
+                },
+                "runAfter": {},
+                "type": "ParseJson"
+            },
+            "Update_Azure_Blob": {
+                "inputs": {
+                    "body": "@body('Parse_Grade_Email')",
+                    "host": {
+                        "connection": { "name": "@parameters('$connections')['azureblob']['connectionId']" }
+                    },
+                    "method": "put",
+                    "path": "/datasets/default/files/grades.json"
+                },
+                "runAfter": { "Parse_Grade_Email": ["Succeeded"] },
+                "type": "ApiConnection"
+            }
+        },
+        "triggers": {
+            "When_Grade_Email_Arrives": {
+                "inputs": {
+                    "host": {
+                        "connection": { "name": "@parameters('$connections')['gmail']['connectionId']" }
+                    },
+                    "method": "get",
+                    "path": "/Mail/OnNewEmail",
+                    "queries": {
+                        "includeAttachments": false,
+                        "query": "from:lcps.org subject:Gradebook"
+                    }
+                },
+                "recurrence": { "frequency": "Hour", "interval": 1 },
+                "type": "ApiConnection"
+            }
+        }
+    }
+}
