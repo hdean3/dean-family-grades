@@ -4,64 +4,19 @@ from azure.storage.blob import BlobServiceClient
 import io
 import os
 
-# --- PRIVACY & CONFIGURATION LAYER ---
-# These are pulled from Azure Environment Variables for public safety
+# --- 1. CONFIGURATION LAYER (Pulled from Azure Env Vars) ---
 STUDENT_NAME = os.getenv("STUDENT_NAME", "Student") 
-RATE_APLUS = float(os.getenv("RATE_APLUS", 150))
-RATE_A = float(os.getenv("RATE_A", 125))
-RATE_AMINUS = float(os.getenv("RATE_AMINUS", 100))
-RATE_BPLUS = float(os.getenv("RATE_BPLUS", 75))
-RATE_B = float(os.getenv("RATE_B", 50))
-RATE_BMINUS = float(os.getenv("RATE_BMINUS", 25))
+RATE_APLUS = float(os.getenv("RATE_APLUS", 150.0))
+RATE_A = float(os.getenv("RATE_A", 125.0))
+RATE_AMINUS = float(os.getenv("RATE_AMINUS", 100.0))
+RATE_BPLUS = float(os.getenv("RATE_BPLUS", 75.0))
+RATE_B = float(os.getenv("RATE_B", 50.0))
+RATE_BMINUS = float(os.getenv("RATE_BMINUS", 25.0))
 
 rates = {
     "A+": RATE_APLUS, "A": RATE_A, "A-": RATE_AMINUS, 
     "B+": RATE_BPLUS, "B": RATE_B, "B-": RATE_BMINUS
 }
-
-def get_history_and_summary():
-    connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
-    container_client = blob_service_client.get_container_client("dean-family-grades")
-    
-    historical_data = []
-    blobs = sorted(container_client.list_blobs(), key=lambda x: x.name)
-    
-    for blob in blobs:
-        if blob.name.startswith("grades_") and blob.name.endswith(".json"):
-            stream = container_client.download_blob(blob.name).readall()
-            df = pd.read_json(io.BytesIO(stream))
-            date_str = blob.name.split('_')[1].replace('.json', '')
-            df['Date'] = pd.to_datetime(date_str)
-            historical_data.append(df)
-            
-    if len(historical_data) >= 2:
-        # Weekly Summary Logic
-        latest = historical_data[-1]['grade_numeric'].mean()
-        previous = historical_data[-2]['grade_numeric'].mean()
-        delta = latest - previous
-        st.subheader("📊 Weekly Progress Summary")
-        st.metric("Academic Performance", f"{latest:.1f}%", delta=f"{delta:.1f}%")
-
-    return pd.concat(historical_data) if historical_data else pd.DataFrame()
-
-st.set_page_config(page_title=f"{STUDENT_NAME}: Rewards", layout="wide")
-st.title(f"🎓 {STUDENT_NAME}: Semester Rewards")
-
-# --- CURRENT DATA (Will be fed by your Logic App) ---
-current_data = {
-    'Aerospace Science I': 99,
-    'US & VA History A': 93,
-    'Economics': 83,
-    'English 11A': 80,
-    'Data Science': 77,
-    'Env. Science': 76
-}
-missing_assignments = 1 # Logic App will update this
-
-# --- THE PAYOUT TIERS ---
-# We can refine these once Claudia gives the final word
-rates = {"A+": 150, "A": 125, "A-": 100, "B+": 75, "B": 50, "B-": 25}
 
 def get_payout(score):
     if score >= 97: return rates["A+"]
@@ -72,38 +27,78 @@ def get_payout(score):
     if score >= 80: return rates["B-"]
     return 0
 
-# --- CALCULATIONS ---
+# --- 2. DATA LAYER (Storage Sync) ---
+def get_data_and_history():
+    connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    if not connect_str:
+        st.error("Storage Connection String missing!")
+        return None, pd.DataFrame()
+
+    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+    container_client = blob_service_client.get_container_client("dean-family-grades")
+    
+    historical_data = []
+    # Sort blobs to find the newest one
+    blobs = sorted(container_client.list_blobs(), key=lambda x: x.name)
+    
+    current_json = None
+    for blob in blobs:
+        if blob.name.startswith("grades_") and blob.name.endswith(".json"):
+            content = container_client.download_blob(blob.name).readall()
+            df = pd.read_json(io.BytesIO(content))
+            # Extract date for history chart
+            date_val = blob.name.split('_')[1].replace('.json', '')
+            df['ReportDate'] = pd.to_datetime(date_val)
+            historical_data.append(df)
+            current_json = df # Last one in loop is newest
+
+    return current_json, (pd.concat(historical_data) if historical_data else pd.DataFrame())
+
+# --- 3. DASHBOARD UI ---
+st.set_page_config(page_title=f"{STUDENT_NAME}: Rewards", layout="wide")
+current_df, history_df = get_data_and_history()
+
+# Header Section
+st.title(f"🎓 {STUDENT_NAME}: Semester Rewards")
+
+if not history_df.empty and len(history_df['ReportDate'].unique()) >= 2:
+    # Summary Table logic
+    dates = sorted(history_df['ReportDate'].unique())
+    latest_avg = history_df[history_df['ReportDate'] == dates[-1]]['grade_numeric'].mean()
+    prev_avg = history_df[history_df['ReportDate'] == dates[-2]]['grade_numeric'].mean()
+    delta = latest_avg - prev_avg
+    
+    st.subheader("📊 Weekly Progress Summary")
+    st.metric("Academic Performance", f"{latest_avg:.1f}%", delta=f"{delta:.1f}%")
+
+# Main Stats Logic
+if current_df is not None:
+    # Convert dataframe to a dict for the simulator
+    current_data = dict(zip(current_df['subject'], current_df['score']))
+    missing_assignments = int(current_df['missing'].iloc[0]) if 'missing' in current_df else 0
+else:
+    # Fallback to empty state
+    current_data = {'Subject': 0}
+    missing_assignments = 0
+
 current_total = sum(get_payout(s) for s in current_data.values())
 max_payout = len(current_data) * rates["A+"]
 
-# --- SIDEBAR: MOTIVATION SLIDERS ---
-st.sidebar.header("🚀 Motivation Simulator")
-simulated_grades = {}
-for subject, score in current_data.items():
-    simulated_grades[subject] = st.sidebar.slider(f"{subject}", 60, 100, score)
-sim_total = sum(get_payout(s) for s in simulated_grades.values())
-
-# --- TOP METRICS ROW ---
+# Metrics Row
 m1, m2, m3 = st.columns(3)
-with m1:
-    st.metric("Max Potential", f"${max_payout:.2f}", help="What you get for all A+ grades")
-with m2:
-    if missing_assignments > 0:
-        st.metric("Current Earned", "$0.00", delta=f"- ${current_total} Locked", delta_color="inverse")
-    else:
-        st.metric("Current Earned", f"${current_total:.2f}")
+with m1: st.metric("Max Potential", f"${max_payout:.2f}")
+with m2: 
+    val = f"${current_total:.2f}" if missing_assignments == 0 else "$0.00"
+    st.metric("Current Earned", val, delta=f"- ${current_total} Locked" if missing_assignments > 0 else None, delta_color="inverse")
 with m3:
-    st.metric("Simulated Reward", f"${sim_total:.2f}", delta=f"${sim_total - current_total:.2f}")
+    st.metric("Simulation Value", f"${current_total:.2f}")
 
-# --- LOCK ALERT ---
+# Alert Box
 if missing_assignments > 0:
-    st.error(f"🛑 PAYOUT IS LOCKED. You have {missing_assignments} missing assignment in History. Turn it in to unlock your ${current_total}!")
+    st.error(f"🛑 PAYOUT IS LOCKED. You have {missing_assignments} missing assignments! Turn them in to unlock your ${current_total}!")
 
-st.divider()
-st.write("### How to increase your payout:")
-st.info("Move the sliders in the sidebar to see how much more you earn for every grade bump!")
-
-history_df = get_history_and_summary()
+# Charts
 if not history_df.empty:
+    st.divider()
     st.header("📈 Performance Over Time")
-    st.line_chart(history_df.set_index('Date')['grade_numeric'])
+    st.line_chart(history_df.set_index('ReportDate')['grade_numeric'])
