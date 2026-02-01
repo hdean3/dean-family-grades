@@ -1,15 +1,13 @@
-# 🎓 Automated Student Reward Dashboard
-Track grades automatically and simulate financial rewards based on academic performance.
+# 🎓 Student Academic Reward Tracker
+Automate grade tracking and motivate students with real-time financial reward simulations.
 
-## 🚀 Features
-- **Logic App Sync**: Syncs grades from automated school emails (Gmail) to Azure Storage.
-- **Privacy First**: All names and payout amounts are hidden via Environment Variables.
-- **Weekly Progress**: Metrics show how performance has changed since the last email.
+## 🚀 How it Works
+1. **Logic App**: Senses incoming school emails, parses grades, and saves them to Azure Blob Storage.
+2. **Container App**: A Streamlit dashboard that calculates rewards based on customizable tiers.
+3. **Privacy**: No student names are stored in the code. All configuration is done via Environment Variables.
 
-## 🛠️ Setup
-1. **Container App**: Deploy this image to Azure.
-2. **Environment Variables**:
-   - `STUDENT_NAME`: Your student's name.
-   - `RATE_APLUS` ... `RATE_BMINUS`: Payout amounts.
-   - `AZURE_STORAGE_CONNECTION_STRING`: Your storage access key.
-3. **Automation**: Point an Azure Logic App to your student's grade email. Save the JSON output as `grades_@{utcNow()}.json` in your blob container.
+## 🛠️ Configuration
+Set these Environment Variables in your Azure Container App:
+- `STUDENT_NAME`: (e.g., "Ben Dean")
+- `RATE_APLUS`: (e.g., 150)
+- `AZURE_STORAGE_CONNECTION_STRING`: Your storage access key.
