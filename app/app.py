@@ -4,17 +4,28 @@ from azure.storage.blob import BlobServiceClient
 import io
 import os
 
-# --- 1. PRIVACY & CONFIGURATION LAYER ---
-# These pull from Azure Environment Variables. Default values are for the public repo.
+# --- 1. CONFIGURATION & THEME ---
 STUDENT_NAME = os.getenv("STUDENT_NAME", "Student") 
-RATE_APLUS = float(os.getenv("RATE_APLUS", 150.0))
-RATE_A = float(os.getenv("RATE_A", 125.0))
-RATE_AMINUS = float(os.getenv("RATE_AMINUS", 100.0))
-RATE_BPLUS = float(os.getenv("RATE_BPLUS", 75.0))
-RATE_B = float(os.getenv("RATE_B", 50.0))
-RATE_BMINUS = float(os.getenv("RATE_BMINUS", 25.0))
+rates = {
+    "A+": float(os.getenv("RATE_APLUS", 150.0)),
+    "A": float(os.getenv("RATE_A", 125.0)),
+    "A-": float(os.getenv("RATE_AMINUS", 100.0)),
+    "B+": float(os.getenv("RATE_BPLUS", 75.0)),
+    "B": float(os.getenv("RATE_B", 50.0)),
+    "B-": float(os.getenv("RATE_BMINUS", 25.0))
+}
 
-rates = {"A+": RATE_APLUS, "A": RATE_A, "A-": RATE_AMINUS, "B+": RATE_BPLUS, "B": RATE_B, "B-": RATE_BMINUS}
+# School Colors (Customize these hex codes!)
+PRIMARY_COLOR = "#1B365D" # Deep Navy
+SECONDARY_COLOR = "#FFC72C" # Gold
+
+st.markdown(f"""
+    <style>
+    .main {{ background-color: #f5f7f9; }}
+    .stMetric {{ border: 2px solid {PRIMARY_COLOR}; padding: 15px; border-radius: 10px; background-color: white; }}
+    h1, h2, h3 {{ color: {PRIMARY_COLOR}; }}
+    </style>
+    """, unsafe_allow_root=True)
 
 def get_payout(score):
     if score >= 97: return rates["A+"]
@@ -25,25 +36,23 @@ def get_payout(score):
     if score >= 80: return rates["B-"]
     return 0
 
-# --- 2. DATA & HISTORY LAYER ---
-def load_all_data():
-    connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    if not connect_str:
-        st.error("Missing Storage Connection String!")
+# --- 2. PROACTIVE DATA SYNC ---
+def load_data():
+    conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    if not conn_str or "DefaultEndpoints" not in conn_str:
+        st.error("Invalid Storage Connection String!")
         return None, pd.DataFrame()
 
-    client = BlobServiceClient.from_connection_string(connect_str)
+    client = BlobServiceClient.from_connection_string(conn_str)
     container = client.get_container_client("dean-family-grades")
-    
-    historical_data = []
     blobs = sorted(container.list_blobs(), key=lambda x: x.name)
     
+    historical_data = []
     latest_df = None
     for blob in blobs:
-        if blob.name.startswith("grades_") and blob.name.endswith(".json"):
+        if blob.name.startswith("grades_"):
             data = container.download_blob(blob.name).readall()
             df = pd.read_json(io.BytesIO(data))
-            # Extract date from filename: grades_2026-02-01.json
             date_str = blob.name.split('_')[1].replace('.json', '')
             df['ReportDate'] = pd.to_datetime(date_str)
             historical_data.append(df)
@@ -51,42 +60,36 @@ def load_all_data():
 
     return latest_df, (pd.concat(historical_data) if historical_data else pd.DataFrame())
 
-# --- 3. DASHBOARD UI ---
+# --- 3. UI RENDERING ---
 st.set_page_config(page_title=f"{STUDENT_NAME}: Rewards", layout="wide")
-current_df, history_df = load_all_data()
+current_df, history_df = load_data()
 
 st.title(f"🎓 {STUDENT_NAME}: Semester Rewards")
 
-# Weekly Summary (Proactive Comparison)
-if not history_df.empty and len(history_df['ReportDate'].unique()) >= 2:
-    dates = sorted(history_df['ReportDate'].unique())
-    latest_avg = history_df[history_df['ReportDate'] == dates[-1]]['score'].mean()
-    prev_avg = history_df[history_df['ReportDate'] == dates[-2]]['score'].mean()
-    delta = latest_avg - prev_avg
-    st.subheader("📊 Weekly Progress Summary")
-    st.metric("Academic Performance", f"{latest_avg:.1f}%", delta=f"{delta:.1f}%")
-
-# Main Stats
 if current_df is not None:
-    current_data = dict(zip(current_df['subject'], current_df['score']))
+    # Calculate Payouts per class
+    current_df['Earnings'] = current_df['score'].apply(get_payout)
+    current_total = current_df['Earnings'].sum()
     missing_count = int(current_df['missing'].iloc[0]) if 'missing' in current_df.columns else 0
-else:
-    current_data = {}; missing_count = 0
+    
+    # TOP METRICS
+    m1, m2, m3 = st.columns(3)
+    with m1: st.metric("Max Potential", f"${len(current_df)*rates['A+']:.2f}")
+    with m2: st.metric("Earned To Date", f"${current_total:.2f}" if missing_count == 0 else "$0.00", 
+                       delta=f"- ${current_total} Locked" if missing_count > 0 else None, delta_color="inverse")
+    with m3: st.metric("Overall GPA", f"{current_df['score'].mean():.1f}%")
 
-current_total = sum(get_payout(s) for s in current_data.values())
-max_payout = len(current_data) * rates["A+"]
+    # NEW: INDIVIDUAL CLASS BREAKDOWN
+    st.subheader("💰 Reward Breakdown by Class")
+    breakdown_cols = st.columns(len(current_df))
+    for i, row in current_df.iterrows():
+        with breakdown_cols[i]:
+            st.metric(row['subject'], f"${row['Earnings']:.0f}", help=f"Score: {row['score']}%")
 
-m1, m2, m3 = st.columns(3)
-with m1: st.metric("Max Potential", f"${max_payout:.2f}")
-with m2: 
-    disp_val = f"${current_total:.2f}" if missing_count == 0 else "$0.00"
-    st.metric("Current Earned", disp_val, delta=f"- ${current_total} Locked" if missing_count > 0 else None, delta_color="inverse")
-with m3: st.metric("Simulated Reward", f"${current_total:.2f}")
-
-if missing_count > 0:
-    st.error(f"🛑 PAYOUT IS LOCKED. You have {missing_count} missing assignments! Turn them in to unlock your ${current_total:.2f}!")
+    if missing_count > 0:
+        st.error(f"🛑 PAYOUT IS LOCKED: {missing_count} missing assignment(s) detected.")
 
 if not history_df.empty:
     st.divider()
-    st.header("📈 Grade Trends")
+    st.header("📈 Grade Performance Over Time")
     st.line_chart(history_df.groupby('ReportDate')['score'].mean())
