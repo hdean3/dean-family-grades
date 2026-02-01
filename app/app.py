@@ -15,7 +15,7 @@ rates = {
     "B-": float(os.getenv("RATE_BMINUS", 25.0))
 }
 
-# --- THEME: Loudoun County Colors (Maroon/Navy Example) ---
+# --- THEME: School Colors (Maroon & Navy) ---
 PRIMARY_COLOR = "#800000" # Maroon
 SECONDARY_COLOR = "#000080" # Navy
 
@@ -53,6 +53,7 @@ def load_all_data():
         if blob.name.startswith("grades_") and blob.name.endswith(".json"):
             data = container.download_blob(blob.name).readall()
             df = pd.read_json(io.BytesIO(data))
+            # Tag the date from filename: grades_2026-02-01.json
             date_str = blob.name.split('_')[1].replace('.json', '')
             df['ReportDate'] = pd.to_datetime(date_str)
             historical_data.append(df)
