@@ -22,7 +22,7 @@ missing_assignments = 1 # Logic App will update this
 
 # --- THE PAYOUT TIERS ---
 # We can refine these once Claudia gives the final word
-rates = {"A+": 25, "A": 20, "A-": 15, "B+": 10, "B": 5, "B-": 2}
+rates = {"A+": 150, "A": 125, "A-": 100, "B+": 75, "B": 50, "B-": 25}
 
 def get_payout(score):
     if score >= 97: return rates["A+"]
