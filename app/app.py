@@ -4,38 +4,46 @@ from azure.storage.blob import BlobServiceClient
 import io
 import os
 
-def render_history():
-    st.header("📈 Grade Performance Over Time")
-    
-    # Connect to storage
+# --- PRIVACY & CONFIGURATION LAYER ---
+# These are pulled from Azure Environment Variables for public safety
+STUDENT_NAME = os.getenv("STUDENT_NAME", "Student") 
+RATE_APLUS = float(os.getenv("RATE_APLUS", 150))
+RATE_A = float(os.getenv("RATE_A", 125))
+RATE_AMINUS = float(os.getenv("RATE_AMINUS", 100))
+RATE_BPLUS = float(os.getenv("RATE_BPLUS", 75))
+RATE_B = float(os.getenv("RATE_B", 50))
+RATE_BMINUS = float(os.getenv("RATE_BMINUS", 25))
+
+rates = {
+    "A+": RATE_APLUS, "A": RATE_A, "A-": RATE_AMINUS, 
+    "B+": RATE_BPLUS, "B": RATE_B, "B-": RATE_BMINUS
+}
+
+def get_history_and_summary():
     connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     blob_service_client = BlobServiceClient.from_connection_string(connect_str)
     container_client = blob_service_client.get_container_client("dean-family-grades")
     
     historical_data = []
-    blobs = container_client.list_blobs()
+    blobs = sorted(container_client.list_blobs(), key=lambda x: x.name)
     
     for blob in blobs:
         if blob.name.startswith("grades_") and blob.name.endswith(".json"):
-            # Download and parse each week's file
             stream = container_client.download_blob(blob.name).readall()
             df = pd.read_json(io.BytesIO(stream))
-            
-            # Extract date from filename: grades_2026-02-01.json
             date_str = blob.name.split('_')[1].replace('.json', '')
             df['Date'] = pd.to_datetime(date_str)
             historical_data.append(df)
             
-    if historical_data:
-        full_history = pd.concat(historical_data)
-        # Create a chart showing GPA or average grade value over time
-        st.line_chart(full_history.set_index('Date')['grade_numeric'])
-    else:
-        st.info("No history yet! Tracking will start with your next Grade Update email.")
+    if len(historical_data) >= 2:
+        # Weekly Summary Logic
+        latest = historical_data[-1]['grade_numeric'].mean()
+        previous = historical_data[-2]['grade_numeric'].mean()
+        delta = latest - previous
+        st.subheader("📊 Weekly Progress Summary")
+        st.metric("Academic Performance", f"{latest:.1f}%", delta=f"{delta:.1f}%")
 
-# --- PRIVACY LAYER (For your Backlog) ---
-# We use environment variables so you can make this repo Public later
-STUDENT_NAME = os.getenv("STUDENT_NAME", "Ben Dean") 
+    return pd.concat(historical_data) if historical_data else pd.DataFrame()
 
 st.set_page_config(page_title=f"{STUDENT_NAME}: Rewards", layout="wide")
 st.title(f"🎓 {STUDENT_NAME}: Semester Rewards")
@@ -95,4 +103,7 @@ st.divider()
 st.write("### How to increase your payout:")
 st.info("Move the sliders in the sidebar to see how much more you earn for every grade bump!")
 
-render_history()
+history_df = get_history_and_summary()
+if not history_df.empty:
+    st.header("📈 Performance Over Time")
+    st.line_chart(history_df.set_index('Date')['grade_numeric'])
