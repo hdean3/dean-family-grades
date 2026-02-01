@@ -1,6 +1,37 @@
 import streamlit as st
 import pandas as pd
+from azure.storage.blob import BlobServiceClient
+import io
 import os
+
+def render_history():
+    st.header("📈 Grade Performance Over Time")
+    
+    # Connect to storage
+    connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+    container_client = blob_service_client.get_container_client("dean-family-grades")
+    
+    historical_data = []
+    blobs = container_client.list_blobs()
+    
+    for blob in blobs:
+        if blob.name.startswith("grades_") and blob.name.endswith(".json"):
+            # Download and parse each week's file
+            stream = container_client.download_blob(blob.name).readall()
+            df = pd.read_json(io.BytesIO(stream))
+            
+            # Extract date from filename: grades_2026-02-01.json
+            date_str = blob.name.split('_')[1].replace('.json', '')
+            df['Date'] = pd.to_datetime(date_str)
+            historical_data.append(df)
+            
+    if historical_data:
+        full_history = pd.concat(historical_data)
+        # Create a chart showing GPA or average grade value over time
+        st.line_chart(full_history.set_index('Date')['grade_numeric'])
+    else:
+        st.info("No history yet! Tracking will start with your next Grade Update email.")
 
 # --- PRIVACY LAYER (For your Backlog) ---
 # We use environment variables so you can make this repo Public later
@@ -63,3 +94,5 @@ if missing_assignments > 0:
 st.divider()
 st.write("### How to increase your payout:")
 st.info("Move the sliders in the sidebar to see how much more you earn for every grade bump!")
+
+render_history()
