@@ -32,3 +32,9 @@ jobs:
               RATE_B="${{ vars.RATE_B }}" \
               RATE_BMINUS="${{ vars.RATE_BMINUS }}" \
               AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}"
+
+      - name: Deploy Logic App Configuration
+        run: |
+          az resource update \
+            --ids /subscriptions/0193ed34-6e20-404d-9d2d-ab804a1a8129/resourceGroups/DeanFamily-RG/providers/Microsoft.Logic/workflows/BenGrade-Automation \
+            --set properties.definition=@infrastructure/logic-app.json
