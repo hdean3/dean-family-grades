@@ -4,7 +4,7 @@ from azure.storage.blob import BlobServiceClient
 import io
 import os
 
-# --- 1. CONFIGURATION (Pulled from GitHub Actions/Azure) ---
+# --- 1. CONFIGURATION (Pulled from GitHub/Azure) ---
 STUDENT_NAME = os.getenv("STUDENT_NAME", "Ben Dean") 
 rates = {
     "A+": float(os.getenv("RATE_APLUS", 150.0)),
@@ -15,7 +15,6 @@ rates = {
     "B-": float(os.getenv("RATE_BMINUS", 25.0))
 }
 
-# GPA Mapping Logic
 def get_grade_info(score):
     if score >= 97: return "A+", rates["A+"], 4.0
     if score >= 93: return "A", rates["A"], 4.0
@@ -48,9 +47,9 @@ current_df = load_data()
 st.title(f"🎓 {STUDENT_NAME}: Semester Rewards")
 
 if current_df is not None:
-    # --- WHAT-IF SLIDER ---
-    st.sidebar.header("🚀 What-If Analysis")
-    score_boost = st.sidebar.slider("Simulate a score increase:", 0, 15, 0)
+    # --- MOTIVATION SIMULATOR ---
+    st.sidebar.header("🚀 Motivation Simulator")
+    score_boost = st.sidebar.slider("Simulate a score increase for all classes:", 0, 15, 0)
     
     current_df['Display Score'] = (current_df['score'] + score_boost).clip(upper=100)
     grade_data = current_df['Display Score'].apply(get_grade_info)
@@ -68,12 +67,14 @@ if current_df is not None:
     m1, m2, m3 = st.columns(3)
     m1.metric("Max Potential", "$1,000.00")
     m2.metric("Projected Payout", f"${total_earned + (100.0 if all(s >= 90 for s in current_df['Display Score']) else 0.0):,.2f}")
-    m3.metric("Current GPA", f"{avg_score:.1f}% ({avg_gpa:.1f} / {overall_letter})")
+    m3.metric("GPA", f"{avg_score:.1f}% ({avg_gpa:.1f} / {overall_letter})")
 
-    # Table
     st.subheader("💰 Reward Breakdown")
     display_df = current_df[['subject', 'Display Score', 'Grade', 'Earnings']].copy()
     display_df.columns = ['Subject', 'Score', 'Grade', 'Earnings']
     st.dataframe(display_df.style.format({"Earnings": "${:,.2f}"}), use_container_width=True, hide_index=True)
+    
+    # Braces Reminder
+    st.info("🦷 **Daily Reminder**: Ben, put the bands on your braces!")
 else:
-    st.info("Syncing grades from ParentVUE...")
+    st.info("Waiting for first grade sync...")
