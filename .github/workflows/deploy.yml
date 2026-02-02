@@ -37,11 +37,11 @@ jobs:
         run: |
           LOGIC_ID=$(az logic workflow show --name BenGrade-Automation --resource-group DeanFamily-RG --query id -o tsv)
           
-          # Extract only the actions and triggers to avoid wiping connection parameters
-          ACTIONS=$(jq -c '.definition.actions' infrastructure/logic-app.json)
-          TRIGGERS=$(jq -c '.definition.triggers' infrastructure/logic-app.json)
+          # Extract the definition (logic) and the parameters (connection info)
+          LOGIC_DEF=$(jq -c '.definition' infrastructure/logic-app.json)
+          LOGIC_PARAMS=$(jq -c '.' infrastructure/logic-app-parameters.json)
           
           az resource update \
             --ids "$LOGIC_ID" \
-            --set properties.definition.actions="$ACTIONS" \
-            --set properties.definition.triggers="$TRIGGERS"
+            --set properties.definition="$LOGIC_DEF" \
+            --set properties.parameters="$LOGIC_PARAMS"
