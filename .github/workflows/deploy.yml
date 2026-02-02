@@ -35,6 +35,8 @@ jobs:
 
       - name: Deploy Logic App Configuration
         run: |
+          # Use jq to grab only the 'definition' object from the file
+          LOGIC_DEF=$(jq -r '.definition' infrastructure/logic-app.json)
           az resource update \
-            --ids /subscriptions/0193ed34-6e20-404d-9d2d-ab804a1a8129/resourceGroups/DeanFamily-RG/providers/Microsoft.Logic/workflows/BenGrade-Automation \
-            --set properties.definition=@infrastructure/logic-app.json
+            --ids /subscriptions/0193ed34-6e20-404d-9d2d-ab804a1a8129/resourceGroups/DeanFamily-RG/providers/Microsoft.App/managedEnvironments/managedEnvironment-DeanFamilyRG-82d3/workflows/BenGrade-Automation \
+            --set properties.definition="$LOGIC_DEF"
