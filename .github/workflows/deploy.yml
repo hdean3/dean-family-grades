@@ -35,11 +35,13 @@ jobs:
 
       - name: Deploy Logic App Configuration
         run: |
-          # 1. Dynamically find the Logic App ID to avoid "Not Found" errors
           LOGIC_ID=$(az logic workflow show --name BenGrade-Automation --resource-group DeanFamily-RG --query id -o tsv)
           
-          # 2. Extract the definition and deploy
-          LOGIC_DEF=$(jq -r '.definition' infrastructure/logic-app.json)
+          # Extract only the actions and triggers to avoid wiping connection parameters
+          ACTIONS=$(jq -c '.definition.actions' infrastructure/logic-app.json)
+          TRIGGERS=$(jq -c '.definition.triggers' infrastructure/logic-app.json)
+          
           az resource update \
             --ids "$LOGIC_ID" \
-            --set properties.definition="$LOGIC_DEF"
+            --set properties.definition.actions="$ACTIONS" \
+            --set properties.definition.triggers="$TRIGGERS"
