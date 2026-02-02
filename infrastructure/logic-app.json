@@ -3,10 +3,7 @@
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
-      "$connections": {
-        "defaultValue": {},
-        "type": "Object"
-      }
+      "$connections": { "defaultValue": {}, "type": "Object" }
     },
     "triggers": {
       "Recurrence": {
@@ -15,20 +12,20 @@
       }
     },
     "actions": {
-      "Get_Latest_Gradebook_Email": {
+      "List_Emails": {
         "type": "ApiConnection",
         "inputs": {
           "host": { "connection": { "name": "@parameters('$connections')['gmail']['connectionId']" } },
           "method": "get",
           "path": "/Mail/GetEmails",
-          "queries": { "query": "Subject:Gradebook", "top": 1 }
+          "queries": { "fetchOnlyWithAttachments": false, "includeAttachments": false, "searchQuery": "Subject:Gradebook", "top": 1 }
         }
       },
       "Update_Blob": {
         "type": "ApiConnection",
-        "runAfter": { "Get_Latest_Gradebook_Email": ["Succeeded"] },
+        "runAfter": { "List_Emails": ["Succeeded"] },
         "inputs": {
-          "body": "@body('Get_Latest_Gradebook_Email')?[0]?.Body",
+          "body": "@first(body('List_Emails')?['value'])?['Body']",
           "host": { "connection": { "name": "@parameters('$connections')['azureblob']['connectionId']" } },
           "method": "put",
           "path": "/datasets/default/files/grades.json"
