@@ -1,21 +1,38 @@
 name: Deploy Grade Dashboard
+
 on:
   push:
     branches: [ main ]
+
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build Image in ACR
+        run: |
+          az acr build --registry deangraderegistry --image ben-grade-dashboard:${{ github.sha }} .
+
       - name: Deploy to Container App
         run: |
           az containerapp update \
             --name ben-grade-dashboard \
             --resource-group DeanFamily-RG \
-            --container-name ben-tracker-final \
-            --image deangraderegistry.azurecr.io/ben-grade-dashboard:7c94efffbc34e2da177983e91e53aea2a1e3b6c6
+            --image deangraderegistry.azurecr.io/ben-grade-dashboard:${{ github.sha }} \
+            --container-name ben-grade-dashboard \
+            --set-env-vars \
+              STUDENT_NAME="${{ vars.STUDENT_NAME }}" \
+              RATE_APLUS="${{ vars.RATE_APLUS }}" \
+              RATE_A="${{ vars.RATE_A }}" \
+              RATE_AMINUS="${{ vars.RATE_AMINUS }}" \
+              RATE_BPLUS="${{ vars.RATE_BPLUS }}" \
+              RATE_B="${{ vars.RATE_B }}" \
+              RATE_BMINUS="${{ vars.RATE_BMINUS }}" \
+              AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}"
