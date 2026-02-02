@@ -1,0 +1,11 @@
+{
+  "$connections": {
+    "value": {
+      "gmail": {
+        "connectionId": "/subscriptions/0193ed34-6e20-404d-9d2d-ab804a1a8129/resourceGroups/DeanFamily-RG/providers/Microsoft.Web/connections/gmail",
+        "connectionName": "gmail",
+        "id": "/subscriptions/0193ed34-6e20-404d-9d2d-ab804a1a8129/providers/Microsoft.Web/locations/eastus/managedApis/gmail"
+      }
+    }
+  }
+}
