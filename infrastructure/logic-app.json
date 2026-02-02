@@ -13,6 +13,10 @@
           "method": "get",
           "path": "/Mail/OnNewEmail",
           "queries": { "includeAttachments": false, "searchQuery": "Subject:Gradebook" }
+        },
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 3
         }
       }
     },
