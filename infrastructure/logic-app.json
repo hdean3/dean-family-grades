@@ -6,25 +6,26 @@
       "$connections": { "defaultValue": {}, "type": "Object" }
     },
     "triggers": {
-      "On_New_Email": {
+      "Every_Hour": {
+        "type": "Recurrence",
+        "recurrence": { "frequency": "Hour", "interval": 1 }
+      }
+    },
+    "actions": {
+      "Search_Emails": {
         "type": "ApiConnection",
         "inputs": {
           "host": { "connection": { "name": "@parameters('$connections')['gmail']['connectionId']" } },
           "method": "get",
-          "path": "/Mail/OnNewEmail",
-          "queries": { "includeAttachments": false, "searchQuery": "Subject:Gradebook" }
-        },
-        "recurrence": {
-          "frequency": "Minute",
-          "interval": 3
+          "path": "/Mail/GetEmails",
+          "queries": { "searchQuery": "Subject:Gradebook", "top": 1 }
         }
-      }
-    },
-    "actions": {
-      "Update_Blob": {
+      },
+      "Update_Grades": {
         "type": "ApiConnection",
+        "runAfter": { "Search_Emails": ["Succeeded"] },
         "inputs": {
-          "body": "@triggerBody()?['Body']",
+          "body": "@first(body('Search_Emails')?['value'])?['Body']",
           "host": { "connection": { "name": "@parameters('$connections')['azureblob']['connectionId']" } },
           "method": "put",
           "path": "/datasets/default/files/grades.json"
