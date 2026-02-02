@@ -61,13 +61,13 @@ if current_df is not None:
     total_earned = current_df['Earnings'].sum()
     avg_score = current_df['score'].mean()
     avg_gpa = current_df['Points'].mean()
-    overall_letter, _, _ = get_grade_info(avg_score)
+    overall_letter, _, gpa_val = get_grade_info(avg_score)
 
     # Metrics
     m1, m2, m3 = st.columns(3)
     m1.metric("Max Potential", "$1,000.00")
     m2.metric("Projected Payout", f"${total_earned + (100.0 if all(s >= 90 for s in current_df['Display Score']) else 0.0):,.2f}")
-    m3.metric("GPA", f"{avg_score:.1f}% ({avg_gpa:.1f} / {overall_letter})")
+    m3.metric("GPA Status", f"{avg_score:.1f}% ({gpa_val:.1f} / {overall_letter})")
 
     st.subheader("💰 Reward Breakdown")
     display_df = current_df[['subject', 'Display Score', 'Grade', 'Earnings']].copy()
@@ -75,6 +75,7 @@ if current_df is not None:
     st.dataframe(display_df.style.format({"Earnings": "${:,.2f}"}), use_container_width=True, hide_index=True)
     
     # Braces Reminder
-    st.info("🦷 **Daily Reminder**: Ben, put the bands on your braces!")
+    st.sidebar.markdown("---")
+    st.sidebar.warning("🦷 **Reminder**: Ben, put the bands on your braces!")
 else:
     st.info("Waiting for first grade sync...")
