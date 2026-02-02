@@ -35,8 +35,11 @@ jobs:
 
       - name: Deploy Logic App Configuration
         run: |
-          # Use jq to grab only the 'definition' object from the file
+          # 1. Dynamically find the Logic App ID to avoid "Not Found" errors
+          LOGIC_ID=$(az logic workflow show --name BenGrade-Automation --resource-group DeanFamily-RG --query id -o tsv)
+          
+          # 2. Extract the definition and deploy
           LOGIC_DEF=$(jq -r '.definition' infrastructure/logic-app.json)
           az resource update \
-            --ids /subscriptions/0193ed34-6e20-404d-9d2d-ab804a1a8129/resourceGroups/DeanFamily-RG/providers/Microsoft.App/managedEnvironments/managedEnvironment-DeanFamilyRG-82d3/workflows/BenGrade-Automation \
+            --ids "$LOGIC_ID" \
             --set properties.definition="$LOGIC_DEF"
