@@ -1,0 +1,9 @@
+.DS_Store
+*.un~
+__pycache__/
+*.pyc
+.env
+
+# Keep sample but not real grades (committed by GitHub Actions bot)
+# data/grades.json is tracked — do NOT gitignore it
+data/last_email_raw.txt

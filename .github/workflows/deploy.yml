@@ -1,47 +1,11 @@
-name: Deploy Grade Dashboard
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Build and Push
-        run: |
-          az acr build --registry deangraderegistry --image ben-grade-dashboard:${{ github.sha }} .
-
-      - name: Deploy
-        run: |
-          az containerapp update \
-            --name ben-grade-dashboard \
-            --resource-group DeanFamily-RG \
-            --container-name ben-grade-dashboard \
-            --image deangraderegistry.azurecr.io/ben-grade-dashboard:${{ github.sha }} \
-            --set-env-vars \
-              STUDENT_NAME="${{ vars.STUDENT_NAME }}" \
-              RATE_APLUS="${{ vars.RATE_APLUS }}" \
-              RATE_A="${{ vars.RATE_A }}" \
-              RATE_AMINUS="${{ vars.RATE_AMINUS }}" \
-              RATE_BPLUS="${{ vars.RATE_BPLUS }}" \
-              RATE_B="${{ vars.RATE_B }}" \
-              RATE_BMINUS="${{ vars.RATE_BMINUS }}" \
-              AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}"
-
-      - name: Deploy Logic App Configuration
-        run: |
-          LOGIC_ID=$(az logic workflow show --name BenGrade-Automation --resource-group DeanFamily-RG --query id -o tsv)
-          
-          # Extract the definition (logic) and the parameters (connection info)
-          LOGIC_DEF=$(jq -c '.definition' infrastructure/logic-app.json)
-          LOGIC_PARAMS=$(jq -c '.' infrastructure/logic-app-parameters.json)
-          
-          az resource update \
-            --ids "$LOGIC_ID" \
-            --set properties.definition="$LOGIC_DEF" \
-            --set properties.parameters="$LOGIC_PARAMS"
+# deploy.yml — RETIRED
+# This workflow previously deployed to Azure Container Apps + ACR.
+# Hosting moved to Streamlit Community Cloud (free).
+# Streamlit Cloud auto-deploys on every push to main — no workflow needed.
+# Grade data is now updated by fetch-grades.yml (replaces Azure Logic App).
+#
+# Azure resources to DELETE (one-time cleanup):
+#   az containerapp delete --name ben-grade-dashboard --resource-group DeanFamily-RG --yes
+#   az acr delete --name deangraderegistry --resource-group DeanFamily-RG --yes
+#   az logicapp delete --name BenGrade-Automation --resource-group DeanFamily-RG --yes
+#   az storage container delete --name dean-family-grades --account-name <storage-account>
