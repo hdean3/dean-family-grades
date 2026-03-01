@@ -162,45 +162,54 @@ def parse_lcps_email(body: str) -> list[dict]:
         return parse_lcps_text(body)
 
     soup = BeautifulSoup(body, "html.parser")
-    grades = []
+    seen = {}  # course -> score; deduplicates multiple matched rows per course
 
-    # Find all table rows that contain a percentage score
     for row in soup.find_all("tr"):
-        cells = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
+        cells = [td.get_text(strip=True) for td in row.find_all("td")]
         if len(cells) < 2:
             continue
 
-        # Look for a cell that contains a percentage (e.g., "87%")
+        # Look for a cell that is exactly "87%" — a standalone percentage score
         score = None
-        score_idx = None
-        for i, cell in enumerate(cells):
-            pct_match = re.search(r"^(\d{1,3})%$", cell)
+        for cell in cells:
+            pct_match = re.match(r"^(\d{1,3})%$", cell)
             if pct_match:
-                score = float(pct_match.group(1))
-                score_idx = i
+                score = int(pct_match.group(1))
                 break
 
-        if score is None or score_idx is None:
+        if score is None or not (0 <= score <= 100):
             continue
 
         # The course name is in the first cell
         raw_name = cells[0]
 
+        # Skip garbled rows where the entire row was concatenated into cells[0]
+        # (these contain "%" from the score column bleeding into the name column)
+        if "%" in raw_name:
+            continue
+
         # Extract course name from "LastName, F /CourseName(period)"
-        slash_match = re.search(r"/(.+?)\(?\d*\)?$", raw_name)
-        if slash_match:
-            course = slash_match.group(1).strip().rstrip("(0123456789").strip()
+        if "/" in raw_name:
+            course = raw_name.split("/", 1)[1].strip()
         else:
-            course = raw_name.strip()
+            # No slash: strip "LastName, F " teacher prefix if present
+            course = re.sub(r"^[A-Z][A-Za-z'-]+,\s+[A-Z]\s+", "", raw_name).strip()
 
-        # Clean up trailing period numbers: "Env Science1" -> "Env Science"
-        course = re.sub(r"\s*\d+\s*$", "", course).strip()
+        # Strip trailing period indicator: "Env Science(1)" -> "Env Science"
+        course = re.sub(r"\s*\(\d+\)\s*$", "", course).strip()
+        # Strip bare trailing digit: "Env Science 1" -> "Env Science"
+        course = re.sub(r"\s+\d+$", "", course).strip()
 
-        if course and 0 <= score <= 100:
-            grades.append({"subject": course, "score": score})
+        if not course or len(course) < 2:
+            continue
+
+        # Deduplicate: first clean extraction wins
+        if course not in seen:
+            seen[course] = score
             print(f"  {course}: {score}")
 
-    if grades:
+    if seen:
+        grades = [{"subject": k, "score": v} for k, v in seen.items()]
         print(f"Parsed {len(grades)} courses from LCPS email HTML.")
         return grades
 
@@ -218,7 +227,7 @@ def parse_lcps_text(text: str) -> list[dict]:
     )
     for m in pattern.finditer(text):
         course = m.group(1).strip()
-        score = float(m.group(2))
+        score = int(m.group(2))
         if 0 <= score <= 100 and len(course) > 2:
             grades.append({"subject": course, "score": score})
             print(f"  {course}: {score}")
