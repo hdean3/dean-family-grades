@@ -21,10 +21,13 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install beautifulsoup4
+        run: pip install beautifulsoup4 studentvue
 
-      - name: Fetch grades from Gmail
+      - name: Fetch grades
         env:
+          PARENTVUE_USERNAME: ${{ secrets.PARENTVUE_USERNAME }}
+          PARENTVUE_PASSWORD: ${{ secrets.PARENTVUE_PASSWORD }}
+          PARENTVUE_DISTRICT: https://portal.lcps.org
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: python scripts/fetch_grades.py
