@@ -1,8 +1,30 @@
 [
-  {"subject": "Algebra II", "score": 94},
-  {"subject": "AP World History", "score": 88},
-  {"subject": "English 10", "score": 91},
-  {"subject": "Biology", "score": 96},
-  {"subject": "Spanish II", "score": 85},
-  {"subject": "PE/Health", "score": 98}
+  {
+    "subject": "Randlett Env Science(1)86%MP3B1 missing assignmentsNathanson, K /Madgwick Personal Finance Sem(2)92%A-1 missing assignmentsParker, C /Huynh US & VA History A(5)100%A+0 missing assignmentsTarrab, A  Data Science(6)70%C-0 missing assignmentsCimino Ferlis, J /Griffin English 11A(7)86%B0 missing assignmentsThank you for participating in the success of your student(s)!",
+    "score": 86.0
+  },
+  {
+    "subject": "Randlett Env Science(1)86%MP3B1 missing assignmentsNathanson, K /Madgwick Personal Finance Sem(2)92%A-1 missing assignmentsParker, C /Huynh US & VA History A(5)100%A+0 missing assignmentsTarrab, A  Data Science(6)70%C-0 missing assignmentsCimino Ferlis, J /Griffin English 11A(7)86%B0 missing assignmentsThank you for participating in the success of your student(s)!",
+    "score": 86.0
+  },
+  {
+    "subject": "Randlett Env Science",
+    "score": 86.0
+  },
+  {
+    "subject": "Madgwick Personal Finance Sem",
+    "score": 92.0
+  },
+  {
+    "subject": "Huynh US & VA History A",
+    "score": 100.0
+  },
+  {
+    "subject": "Tarrab, A  Data Science(6)",
+    "score": 70.0
+  },
+  {
+    "subject": "Griffin English 11A",
+    "score": 86.0
+  }
 ]
