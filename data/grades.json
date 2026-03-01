@@ -1,22 +1,27 @@
 [
   {
     "subject": "Randlett Env Science",
-    "score": 86
+    "score": 86,
+    "missing": 1
   },
   {
     "subject": "Madgwick Personal Finance Sem",
-    "score": 92
+    "score": 92,
+    "missing": 1
   },
   {
     "subject": "Huynh US & VA History A",
-    "score": 100
+    "score": 100,
+    "missing": 0
   },
   {
     "subject": "Data Science",
-    "score": 70
+    "score": 70,
+    "missing": 0
   },
   {
     "subject": "Griffin English 11A",
-    "score": 86
+    "score": 86,
+    "missing": 0
   }
 ]
