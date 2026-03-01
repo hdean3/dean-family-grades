@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<!--
+  Dean Family Grades — TV Splash Dashboard
+  Author: Harold A. Dean, Jr. | Claude Sonnet 4.6 (2026-03-01)
+
+  Tested on:
+    - Amazon Fire TV (Silk Browser)
+    - LG OLED webOS (built-in browser)
+    - Nvidia Shield TV (Chrome)
+    - Apple TV via AirPlay mirror
+
+  10-foot UI design: min 2.5rem text, no hover states, keyboard-navigable,
+  high contrast, auto-refresh every 5 minutes.
+
+  Deployment: Served by tv_server.py (Railway) at /tv
+  Grade data:  Fetched from /api/grades (reads data/grades.json)
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ben's Grades — Dean Family</title>
+  <style>
+    :root {
+      --bg:      #0a0a0a;
+      --card-bg: #141414;
+      --border:  #222;
+      --white:   #ffffff;
+      --muted:   #888888;
+      --green:   #2d6a2d;
+      --green-t: #4caf50;
+      --blue:    #1a3a5c;
+      --blue-t:  #5bc0de;
+      --yellow:  #3a3000;
+      --yellow-t:#f0c040;
+      --red:     #4a1010;
+      --red-t:   #e53935;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 40px 60px;
+      /* Safe zone for TV overscan */
+      padding: clamp(24px, 4vh, 60px) clamp(32px, 5vw, 80px);
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 36px;
+      border-bottom: 2px solid #222;
+      padding-bottom: 24px;
+    }
+    .header-title { font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 700; }
+    .header-title span { color: #e53935; }
+    .header-meta { text-align: right; color: var(--muted); }
+    .header-meta .clock { font-size: clamp(1.6rem, 3vw, 2.4rem); font-weight: 300; color: #ccc; }
+    .header-meta .updated { font-size: clamp(0.8rem, 1.2vw, 1rem); margin-top: 4px; }
+
+    /* ── Grade grid ── */
+    .grade-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+      gap: 24px;
+      flex: 1;
+    }
+
+    /* ── Grade card ── */
+    .grade-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 8px solid #333;
+      transition: transform 0.15s;
+      position: relative;
+    }
+
+    .grade-A  { border-left-color: var(--green-t);  background: #0f1f0f; }
+    .grade-B  { border-left-color: var(--blue-t);   background: #0d1a29; }
+    .grade-C  { border-left-color: var(--yellow-t); background: #1a1500; }
+    .grade-D,
+    .grade-F  { border-left-color: var(--red-t);    background: #1c0a0a; }
+
+    .card-left { flex: 1; min-width: 0; }
+
+    .subject-name {
+      font-size: clamp(1.4rem, 2.5vw, 2rem);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+
+    .teacher-name {
+      font-size: clamp(0.9rem, 1.4vw, 1.1rem);
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .missing-badge {
+      display: inline-block;
+      background: #8b1a1a;
+      color: #ffcccc;
+      font-size: clamp(0.8rem, 1.2vw, 1rem);
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-top: 10px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.65; }
+    }
+
+    .card-right {
+      text-align: right;
+      padding-left: 24px;
+      flex-shrink: 0;
+    }
+
+    .score-pct {
+      font-size: clamp(3rem, 6vw, 5rem);
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .grade-A  .score-pct { color: var(--green-t); }
+    .grade-B  .score-pct { color: var(--blue-t); }
+    .grade-C  .score-pct { color: var(--yellow-t); }
+    .grade-D  .score-pct,
+    .grade-F  .score-pct { color: var(--red-t); }
+
+    .letter-grade {
+      font-size: clamp(1.2rem, 2.2vw, 1.8rem);
+      font-weight: 700;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── GPA bar ── */
+    .gpa-bar-section {
+      margin-top: 36px;
+      border-top: 1px solid #222;
+      padding-top: 24px;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+
+    .gpa-label {
+      font-size: clamp(1.2rem, 2vw, 1.6rem);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .gpa-value {
+      font-size: clamp(2rem, 3.5vw, 2.8rem);
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .progress-track {
+      flex: 1; min-width: 200px;
+      height: 16px;
+      background: #1e1e1e;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 8px;
+      transition: width 1s ease;
+    }
+
+    .refresh-note {
+      font-size: clamp(0.75rem, 1.1vw, 0.9rem);
+      color: #444;
+      text-align: right;
+      margin-top: 12px;
+    }
+
+    /* ── Error state ── */
+    .error-state {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      color: var(--muted);
+    }
+    .error-state p { font-size: 1.6rem; }
+    .error-state small { font-size: 1rem; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-title">
+      ⚔️ <span>Ben</span>'s Grades
+    </div>
+    <div class="header-meta">
+      <div class="clock" id="clock">--:--</div>
+      <div class="updated" id="updated-time">Loading...</div>
+    </div>
+  </div>
+
+  <div class="grade-grid" id="grade-grid">
+    <div class="error-state">
+      <p>📡 Loading grades...</p>
+    </div>
+  </div>
+
+  <div class="gpa-bar-section" id="gpa-section" style="display:none">
+    <div class="gpa-label">GPA (unweighted)</div>
+    <div class="gpa-value" id="gpa-value">—</div>
+    <div class="progress-track">
+      <div class="progress-fill" id="gpa-bar" style="width:0;background:#4caf50"></div>
+    </div>
+  </div>
+
+  <div class="refresh-note" id="refresh-note"></div>
+
+  <script>
+    // ── Clock ──────────────────────────────────────────────────────────────────
+    function updateClock() {
+      const now  = new Date();
+      const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      document.getElementById('clock').textContent = time;
+    }
+    updateClock();
+    setInterval(updateClock, 30000);
+
+    // ── Grade helpers ──────────────────────────────────────────────────────────
+    function letterGrade(score) {
+      if (score >= 93) return 'A';
+      if (score >= 90) return 'A−';
+      if (score >= 87) return 'B+';
+      if (score >= 83) return 'B';
+      if (score >= 80) return 'B−';
+      if (score >= 77) return 'C+';
+      if (score >= 73) return 'C';
+      if (score >= 70) return 'C−';
+      if (score >= 67) return 'D+';
+      if (score >= 60) return 'D';
+      return 'F';
+    }
+
+    function gradeClass(score) {
+      if (score >= 90) return 'grade-A';
+      if (score >= 80) return 'grade-B';
+      if (score >= 70) return 'grade-C';
+      if (score >= 60) return 'grade-D';
+      return 'grade-F';
+    }
+
+    function gpaPoints(score) {
+      // Standard unweighted GPA approximation
+      if (score >= 93) return 4.0;
+      if (score >= 90) return 3.7;
+      if (score >= 87) return 3.3;
+      if (score >= 83) return 3.0;
+      if (score >= 80) return 2.7;
+      if (score >= 77) return 2.3;
+      if (score >= 73) return 2.0;
+      if (score >= 70) return 1.7;
+      if (score >= 67) return 1.3;
+      if (score >= 60) return 1.0;
+      return 0.0;
+    }
+
+    function shortSubject(name) {
+      // Strip teacher name prefix if present (e.g. "Randlett Env Science")
+      // Subject usually follows teacher's last name
+      return name
+        .replace(/^[A-Z][a-z']+ /, '')   // strip leading "Lastname "
+        .trim();
+    }
+
+    // ── Render grades ──────────────────────────────────────────────────────────
+    function renderGrades(grades) {
+      const grid = document.getElementById('grade-grid');
+      if (!grades || !grades.length) {
+        grid.innerHTML = '<div class="error-state"><p>No grade data available.</p></div>';
+        return;
+      }
+
+      const html = grades.map(g => {
+        const letter  = letterGrade(g.score);
+        const cls     = gradeClass(g.score);
+        const subject = shortSubject(g.subject);
+        const missing = g.missing > 0
+          ? `<div class="missing-badge">⚠ ${g.missing} Missing Assignment${g.missing > 1 ? 's' : ''}</div>`
+          : '';
+
+        return `
+          <div class="grade-card ${cls}">
+            <div class="card-left">
+              <div class="subject-name">${esc(subject)}</div>
+              <div class="teacher-name">${esc(g.subject !== subject ? g.subject.split(' ')[0] : '')}</div>
+              ${missing}
+            </div>
+            <div class="card-right">
+              <div class="score-pct">${g.score}%</div>
+              <div class="letter-grade">${letter}</div>
+            </div>
+          </div>`;
+      }).join('');
+
+      grid.innerHTML = html;
+
+      // GPA
+      const avg = grades.reduce((s, g) => s + gpaPoints(g.score), 0) / grades.length;
+      document.getElementById('gpa-value').textContent = avg.toFixed(2);
+      document.getElementById('gpa-bar').style.width   = (avg / 4.0 * 100) + '%';
+      document.getElementById('gpa-bar').style.background =
+        avg >= 3.5 ? '#4caf50' : avg >= 2.5 ? '#5bc0de' : avg >= 1.7 ? '#f0c040' : '#e53935';
+      document.getElementById('gpa-section').style.display = 'flex';
+    }
+
+    // ── Fetch grades ───────────────────────────────────────────────────────────
+    async function fetchGrades() {
+      const updatedEl    = document.getElementById('updated-time');
+      const refreshNote  = document.getElementById('refresh-note');
+
+      try {
+        // Try the Flask API first (Railway deployment)
+        const r = await fetch('/api/grades');
+        if (!r.ok) throw new Error('API returned ' + r.status);
+        const data = await r.json();
+        renderGrades(data.grades || data);
+
+        const now = new Date().toLocaleString('en-US', {
+          month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit', hour12: true
+        });
+        updatedEl.textContent   = 'Updated ' + now;
+        refreshNote.textContent = 'Auto-refreshes every 5 minutes';
+
+      } catch (err) {
+        document.getElementById('grade-grid').innerHTML = `
+          <div class="error-state">
+            <p>📡 Could not reach grades server</p>
+            <small>${err.message}</small>
+            <small>Retrying in 60s...</small>
+          </div>`;
+        updatedEl.textContent = 'Connection error';
+        setTimeout(fetchGrades, 60000);
+        return;
+      }
+    }
+
+    // ── Auto-refresh every 5 minutes ──────────────────────────────────────────
+    fetchGrades();
+    setInterval(fetchGrades, 5 * 60 * 1000);
+
+    function esc(s) {
+      return String(s || '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+
+</body>
+</html>
