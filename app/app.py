@@ -59,8 +59,22 @@ if current_df is not None:
     m3.metric("GPA Status", f"{avg_score:.1f}% ({gpa_val:.1f} / {overall_letter})")
 
     st.subheader("\U0001f4b0 Reward Breakdown")
+    # Ensure missing column exists (graceful fallback for old grades.json)
+    if 'missing' not in current_df.columns:
+        current_df['missing'] = 0
+
+    # missing_vals drives row highlight; it is NOT included in the display columns
+    missing_vals = current_df['missing'].values
+    display_df = current_df[['subject', 'Display Score', 'Grade', 'Earnings']]
+
+    def highlight_missing(row):
+        color = 'background-color: #ffe0e0' if missing_vals[row.name] > 0 else ''
+        return [color] * len(row)
+
     st.dataframe(
-        current_df[['subject', 'Display Score', 'Grade', 'Earnings']].style.format({"Earnings": "${:,.2f}"}),
+        display_df.style
+            .apply(highlight_missing, axis=1)
+            .format({"Earnings": "${:,.2f}"}),
         hide_index=True
     )
 

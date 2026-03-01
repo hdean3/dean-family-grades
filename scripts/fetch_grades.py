@@ -69,7 +69,7 @@ def fetch_via_parentvue() -> list[dict] | None:
             score_str = mark.get("@CalculatedScoreRaw", "")
             try:
                 score = round(float(score_str), 1)
-                grades.append({"subject": name, "score": score})
+                grades.append({"subject": name, "score": score, "missing": 0})
                 print(f"  {name}: {score}")
             except (ValueError, TypeError):
                 pass
@@ -203,13 +203,21 @@ def parse_lcps_email(body: str) -> list[dict]:
         if not course or len(course) < 2:
             continue
 
+        # Extract missing assignments count: "1 missing assignments" -> 1
+        missing = 0
+        for cell in cells:
+            miss_match = re.match(r"^(\d+) missing", cell)
+            if miss_match:
+                missing = int(miss_match.group(1))
+                break
+
         # Deduplicate: first clean extraction wins
         if course not in seen:
-            seen[course] = score
-            print(f"  {course}: {score}")
+            seen[course] = {"score": score, "missing": missing}
+            print(f"  {course}: {score} ({missing} missing)")
 
     if seen:
-        grades = [{"subject": k, "score": v} for k, v in seen.items()]
+        grades = [{"subject": k, "score": v["score"], "missing": v["missing"]} for k, v in seen.items()]
         print(f"Parsed {len(grades)} courses from LCPS email HTML.")
         return grades
 
@@ -229,7 +237,7 @@ def parse_lcps_text(text: str) -> list[dict]:
         course = m.group(1).strip()
         score = int(m.group(2))
         if 0 <= score <= 100 and len(course) > 2:
-            grades.append({"subject": course, "score": score})
+            grades.append({"subject": course, "score": score, "missing": 0})
             print(f"  {course}: {score}")
     if grades:
         print(f"Parsed {len(grades)} courses from text (regex fallback).")
