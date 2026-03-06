@@ -1,12 +1,12 @@
 [
   {
     "subject": "Randlett Env Science",
-    "score": 86,
-    "missing": 1
+    "score": 85,
+    "missing": 2
   },
   {
     "subject": "Madgwick Personal Finance Sem",
-    "score": 92,
+    "score": 91,
     "missing": 1
   },
   {
@@ -16,12 +16,12 @@
   },
   {
     "subject": "Data Science",
-    "score": 70,
+    "score": 48,
     "missing": 0
   },
   {
-    "subject": "Griffin English 11A",
-    "score": 86,
+    "subject": "Stender/Ellsworth/Griffin English 11A",
+    "score": 93,
     "missing": 0
   }
 ]
