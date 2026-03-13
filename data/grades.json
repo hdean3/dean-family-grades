@@ -1,27 +1,27 @@
 [
   {
     "subject": "Randlett Env Science",
-    "score": 85,
-    "missing": 2
+    "score": 84,
+    "missing": 3
   },
   {
     "subject": "Madgwick Personal Finance Sem",
-    "score": 91,
+    "score": 86,
     "missing": 1
   },
   {
     "subject": "Huynh US & VA History A",
-    "score": 100,
+    "score": 96,
     "missing": 0
   },
   {
     "subject": "Data Science",
-    "score": 48,
+    "score": 65,
     "missing": 0
   },
   {
     "subject": "Stender/Ellsworth/Griffin English 11A",
-    "score": 93,
+    "score": 94,
     "missing": 0
   }
 ]
