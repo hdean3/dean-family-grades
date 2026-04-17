@@ -110,6 +110,7 @@ def fetch_via_parentvue() -> list[dict] | None:
             or outer.find('.//ProcessWebServiceRequestResult')
         )
         if result_el is None or not result_el.text:
+            print(f"[debug] soap_call({method_name}): no result_el. Raw response (500 chars): {raw[:500]}")
             return None
         return ET.fromstring(_fix_xml_entities(result_el.text.strip()))
 
