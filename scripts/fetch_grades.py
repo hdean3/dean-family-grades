@@ -112,13 +112,26 @@ def fetch_via_parentvue() -> list[dict] | None:
         return ET.fromstring(_fix_xml_entities(result_el.text.strip()))
 
     try:
-        gradebook = soap_call('Gradebook', '&lt;Parms&gt;&lt;/Parms&gt;')
+        # Portal URL: /PXP2_Gradebook.aspx?AGU=1&studentGU=...
+        # AGU appears to be a 0-based child index: Bailey=0, Ben=1, Riley=2
+        # studentGU in the URL is stale (Bailey's GU) — portal uses session for child selection.
+        # Try AGU=1 as SOAP param to select Ben (second child).
+        gradebook = None
+        for params in [
+            '&lt;Parms&gt;&lt;AGU&gt;1&lt;/AGU&gt;&lt;/Parms&gt;',
+            '&lt;Parms&gt;&lt;/Parms&gt;',
+        ]:
+            gb = soap_call('Gradebook', params)
+            if gb is not None and gb.tag != 'RT_ERROR' and gb.get('Type') != 'Standards':
+                gradebook = gb
+                print(f"Gradebook params matched: {params[:60]}")
+                break
+
         if gradebook is None or gradebook.tag == 'RT_ERROR':
             return None
 
-        # Only use if this is a percentage-based (secondary) gradebook
         if gradebook.get('Type') == 'Standards':
-            print("ParentVUE: default child has standards-based gradebook (elementary) — skipping.", file=sys.stderr)
+            print("ParentVUE: got elementary gradebook — skipping.", file=sys.stderr)
             return None
 
         grades = []
