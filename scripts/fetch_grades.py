@@ -111,6 +111,13 @@ def fetch_via_parentvue() -> list[dict] | None:
         inner_xml = _fix_xml_entities(result_el.text.strip())
         gradebook = ET.fromstring(inner_xml)
 
+        # Debug: print root tag + first child tags so we can see the structure
+        print(f"  [debug] root tag: {gradebook.tag}")
+        print(f"  [debug] root attribs: {list(gradebook.attrib.keys())[:5]}")
+        print(f"  [debug] children: {[c.tag for c in gradebook][:8]}")
+        for child in gradebook:
+            print(f"  [debug]   <{child.tag}> grandchildren: {[gc.tag for gc in child][:5]}")
+
         grades = []
         for course in gradebook.findall('.//Course'):
             name = course.get('Title', 'Unknown')
