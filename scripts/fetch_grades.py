@@ -111,12 +111,35 @@ def fetch_via_parentvue() -> list[dict] | None:
         inner_xml = _fix_xml_entities(result_el.text.strip())
         gradebook = ET.fromstring(inner_xml)
 
-        # Debug: print root tag + first child tags so we can see the structure
-        print(f"  [debug] root tag: {gradebook.tag}")
-        print(f"  [debug] root attribs: {list(gradebook.attrib.keys())[:5]}")
-        print(f"  [debug] children: {[c.tag for c in gradebook][:8]}")
-        for child in gradebook:
-            print(f"  [debug]   <{child.tag}> grandchildren: {[gc.tag for gc in child][:5]}")
+        # Check for error response from Synergy
+        if gradebook.tag == 'RT_ERROR':
+            err_msg = gradebook.get('ERROR_MESSAGE', 'unknown error')
+            print(f"ParentVUE RT_ERROR: {err_msg}", file=sys.stderr)
+            # Try parent=0 if parent=1 failed (some districts use 0 for parent accounts)
+            print("Retrying with parent=0...", file=sys.stderr)
+            soap_body_p0 = soap_body.replace(b'<parent>1</parent>', b'<parent>0</parent>')
+            req2 = _urlreq.Request(
+                f"{LCPS_DISTRICT}/Service/PXPCommunication.asmx",
+                data=soap_body_p0,
+                headers={
+                    'Content-Type': 'text/xml; charset=utf-8',
+                    'SOAPAction': 'http://edupoint.com/webservices/ProcessWebServiceRequest',
+                },
+                method='POST'
+            )
+            with _urlreq.urlopen(req2, timeout=30) as resp2:
+                raw2 = resp2.read().decode('utf-8', errors='replace')
+            outer2 = ET.fromstring(_fix_xml_entities(raw2))
+            result_el2 = outer2.find('.//{http://edupoint.com/webservices/}ProcessWebServiceRequestResult')
+            if result_el2 is None:
+                result_el2 = outer2.find('.//ProcessWebServiceRequestResult')
+            if result_el2 is not None and result_el2.text:
+                inner2 = _fix_xml_entities(result_el2.text.strip())
+                gradebook = ET.fromstring(inner2)
+                print(f"  [debug p0] root tag: {gradebook.tag}, msg: {gradebook.get('ERROR_MESSAGE', 'none')}")
+            else:
+                print("parent=0 retry: no result element", file=sys.stderr)
+                return None
 
         grades = []
         for course in gradebook.findall('.//Course'):
