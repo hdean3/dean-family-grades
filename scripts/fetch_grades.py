@@ -110,14 +110,11 @@ def fetch_via_parentvue() -> list[dict] | None:
             or outer.find('.//ProcessWebServiceRequestResult')
         )
         if result_el is None or not result_el.text:
-            tags = [el.tag for el in outer.iter()][:10]
-            print(f"[debug] soap_call({method_name}): result_el={result_el}, outer.tag={outer.tag}, all_tags={tags}")
-            # Namespace-agnostic fallback
+            # Namespace-agnostic fallback (Python ET sometimes fails find() with namespace+SOAP envelope)
             result_el = next((el for el in outer.iter() if el.tag.endswith('ProcessWebServiceRequestResult')), None)
             if result_el is None or not result_el.text:
-                print(f"[debug] fallback also found nothing. Raw (500): {raw[:500]}")
+                print(f"[debug] soap_call({method_name}): no result element found. Raw (500): {raw[:500]}")
                 return None
-            print(f"[debug] fallback found result_el via iter()")
         return ET.fromstring(_fix_xml_entities(result_el.text.strip()))
 
     try:
@@ -133,11 +130,14 @@ def fetch_via_parentvue() -> list[dict] | None:
             return None
 
         ben_id = None
-        for child in child_root.findall('.//Child'):
-            first = child.get('StudentFirstName', '')
-            last = child.get('StudentLastName', '')
-            cid = child.get('ChildIntID', '')
-            print(f"  Child found: {first} {last} (ChildIntID={cid})")
+        children = child_root.findall('.//Child')
+        if children:
+            print(f"[debug] Child attrs: {list(children[0].attrib.keys())}")
+        for child in children:
+            first = child.get('StudentFirstName', child.get('FirstName', child.get('ChildFirstName', '')))
+            last = child.get('StudentLastName', child.get('LastName', child.get('ChildLastName', '')))
+            cid = child.get('ChildIntID', child.get('ID', child.get('StudentIntID', '')))
+            print(f"  Child found: {first} {last} (ID={cid})")
             if first.strip().lower() == TARGET_STUDENT.lower():
                 ben_id = cid
 
