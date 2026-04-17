@@ -142,19 +142,28 @@ def fetch_via_parentvue() -> list[dict] | None:
                 return None
 
         grades = []
-        for course in gradebook.findall('.//Course'):
+        # ParentVUE uses <Subject> under <Subjects>; StudentVUE uses <Course> under <Courses>
+        elements = gradebook.findall('.//Subject') or gradebook.findall('.//Course')
+        for course in elements:
             name = course.get('Title', 'Unknown')
-            mark = course.find('.//Mark')
-            if mark is None:
-                continue
-            score_str = mark.get('CalculatedScoreRaw', '')
+            # ParentVUE puts the score directly on the Subject element
+            score_str = (
+                course.get('GradeCalculatedScoreRaw', '')
+                or course.get('CalculatedScoreRaw', '')
+            )
+            # Fallback: look inside the current Mark element
+            if not score_str:
+                mark = course.find('.//Mark')
+                score_str = mark.get('CalculatedScoreRaw', '') if mark is not None else ''
             try:
                 score = round(float(score_str), 1)
             except (ValueError, TypeError):
                 continue
 
-            missing = sum(
-                1 for a in mark.findall('.//AssignmentGradeCalc')
+            # Missing assignments
+            has_missing = course.get('HasMissingAssignments', 'false').lower() == 'true'
+            missing = 1 if has_missing else sum(
+                1 for a in course.findall('.//AssignmentGradeCalc')
                 if a.get('Points', '').strip() in ('', 'Not Graded')
                 and a.get('PointsPossible', '0').strip() not in ('0', '')
             )
@@ -170,6 +179,16 @@ def fetch_via_parentvue() -> list[dict] | None:
         print(f"[debug] 0 courses. root=<{gradebook.tag}> children={[c.tag for c in gradebook][:10]}")
         for child in list(gradebook)[:4]:
             print(f"[debug]   <{child.tag}> attrs={list(child.attrib.keys())[:4]} sub={[gc.tag for gc in child][:4]}")
+        # Dump first Subject's full attribute map so we can find the score field
+        subjects = gradebook.findall('.//Subject')
+        if subjects:
+            s0 = subjects[0]
+            print(f"[debug] First <Subject> ALL attrs: {dict(s0.attrib)}")
+            mark0 = s0.find('.//Mark')
+            if mark0 is not None:
+                print(f"[debug] First <Mark> ALL attrs: {dict(mark0.attrib)}")
+            else:
+                print(f"[debug] No <Mark> under first Subject. Sub-elements: {[c.tag for c in s0][:8]}")
         print("ParentVUE: parsed response but found 0 courses.", file=sys.stderr)
         return None
 
