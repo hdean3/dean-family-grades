@@ -4,6 +4,9 @@ fetch_grades.py — Fetches Ben's grades from ParentVUE API (primary)
 or LCPS Gmail Gradebook email (fallback).
 
 Primary: StudentVUE/Synergy API (real-time, no email delay)
+  Step 1 — ChildList: enumerate students on the account, find Ben by first name
+  Step 2 — Gradebook(ChildIntID=...): fetch his courses specifically
+
 Fallback: Gmail IMAP (daily email from lcps.org)
 
 Required env vars (add to GitHub Actions secrets):
@@ -36,6 +39,9 @@ RAW_DEBUG_PATH = Path(__file__).parent.parent / "data" / "last_email_raw.txt"
 IMAP_HOST = "imap.gmail.com"
 LCPS_DISTRICT = os.environ.get("PARENTVUE_DISTRICT", "https://portal.lcps.org")
 
+# First name to look for in ChildList (case-insensitive)
+TARGET_STUDENT = os.environ.get("PARENTVUE_STUDENT_NAME", "Ben")
+
 
 # ── ParentVUE API (primary — direct SOAP, no studentvue library) ─────────────
 
@@ -46,9 +52,13 @@ def _fix_xml_entities(s: str) -> str:
 
 def fetch_via_parentvue() -> list[dict] | None:
     """
-    Fetch grades via direct SOAP to LCPS Synergy. Bypasses the studentvue
-    library entirely so we can fix malformed & entities in the inner XML
-    string before any XML parser sees it.
+    Fetch Ben's grades via direct SOAP to LCPS Synergy.
+
+    Step 1: Call ChildList to enumerate students and find Ben's ChildIntID.
+    Step 2: Call Gradebook(ChildIntID=...) to fetch his high-school courses.
+
+    Bypasses the studentvue library entirely so we can fix malformed &
+    entities in the inner XML string before any XML parser sees it.
     """
     import urllib.request as _urlreq
     import xml.etree.ElementTree as ET
@@ -63,30 +73,29 @@ def fetch_via_parentvue() -> list[dict] | None:
     def xml_esc(s: str) -> str:
         return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
-    soap_body = (
-        "<?xml version='1.0' encoding='utf-8'?>"
-        '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
-        'xmlns:xsd="http://www.w3.org/2001/XMLSchema" '
-        'xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
-        '<soap:Body>'
-        '<ProcessWebServiceRequest xmlns="http://edupoint.com/webservices/">'
-        f'<userID>{xml_esc(username)}</userID>'
-        f'<password>{xml_esc(password)}</password>'
-        '<skipLoginLog>1</skipLoginLog>'
-        '<parent>1</parent>'
-        '<webServiceHandleName>PXPWebServices</webServiceHandleName>'
-        '<methodName>Gradebook</methodName>'
-        '<paramStr>&lt;Parms&gt;&lt;/Parms&gt;</paramStr>'
-        '</ProcessWebServiceRequest>'
-        '</soap:Body>'
-        '</soap:Envelope>'
-    ).encode('utf-8')
-
-    try:
-        print(f"Connecting to ParentVUE (direct SOAP) at {LCPS_DISTRICT}...")
+    def soap_call(method_name: str, param_str: str) -> ET.Element | None:
+        """POST a PXPWebServices SOAP call; return parsed inner XML root or None."""
+        body = (
+            "<?xml version='1.0' encoding='utf-8'?>"
+            '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+            'xmlns:xsd="http://www.w3.org/2001/XMLSchema" '
+            'xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
+            '<soap:Body>'
+            '<ProcessWebServiceRequest xmlns="http://edupoint.com/webservices/">'
+            f'<userID>{xml_esc(username)}</userID>'
+            f'<password>{xml_esc(password)}</password>'
+            '<skipLoginLog>1</skipLoginLog>'
+            '<parent>1</parent>'
+            '<webServiceHandleName>PXPWebServices</webServiceHandleName>'
+            f'<methodName>{method_name}</methodName>'
+            f'<paramStr>{param_str}</paramStr>'
+            '</ProcessWebServiceRequest>'
+            '</soap:Body>'
+            '</soap:Envelope>'
+        ).encode('utf-8')
         req = _urlreq.Request(
             f"{LCPS_DISTRICT}/Service/PXPCommunication.asmx",
-            data=soap_body,
+            data=body,
             headers={
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'http://edupoint.com/webservices/ProcessWebServiceRequest',
@@ -95,63 +104,69 @@ def fetch_via_parentvue() -> list[dict] | None:
         )
         with _urlreq.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode('utf-8', errors='replace')
-
-        # Fix outer SOAP XML entities, then parse
         outer = ET.fromstring(_fix_xml_entities(raw))
-
-        # Find the result element (contains another XML doc as escaped text)
-        result_el = outer.find('.//{http://edupoint.com/webservices/}ProcessWebServiceRequestResult')
-        if result_el is None:
-            result_el = outer.find('.//ProcessWebServiceRequestResult')
+        result_el = (
+            outer.find('.//{http://edupoint.com/webservices/}ProcessWebServiceRequestResult')
+            or outer.find('.//ProcessWebServiceRequestResult')
+        )
         if result_el is None or not result_el.text:
-            print("ParentVUE: no result element in SOAP response.", file=sys.stderr)
+            return None
+        return ET.fromstring(_fix_xml_entities(result_el.text.strip()))
+
+    try:
+        print(f"Connecting to ParentVUE (direct SOAP) at {LCPS_DISTRICT}...")
+
+        # ── Step 1: ChildList — find Ben's ChildIntID ─────────────────────────
+        child_root = soap_call('ChildList', '&lt;Parms&gt;&lt;/Parms&gt;')
+        if child_root is None:
+            print("ParentVUE: ChildList returned no result.", file=sys.stderr)
+            return None
+        if child_root.tag == 'RT_ERROR':
+            print(f"ParentVUE ChildList error: {child_root.get('ERROR_MESSAGE', '?')}", file=sys.stderr)
             return None
 
-        # Fix the INNER XML string — this is where LCPS's bare & entities live
-        inner_xml = _fix_xml_entities(result_el.text.strip())
-        gradebook = ET.fromstring(inner_xml)
+        ben_id = None
+        for child in child_root.findall('.//Child'):
+            first = child.get('StudentFirstName', '')
+            last = child.get('StudentLastName', '')
+            cid = child.get('ChildIntID', '')
+            print(f"  Child found: {first} {last} (ChildIntID={cid})")
+            if first.strip().lower() == TARGET_STUDENT.lower():
+                ben_id = cid
 
-        # Check for error response from Synergy
+        if not ben_id:
+            # Fall back: use first child and warn
+            first_child = child_root.find('.//Child')
+            if first_child is not None:
+                ben_id = first_child.get('ChildIntID', '')
+                fn = first_child.get('StudentFirstName', '?')
+                print(f"  '{TARGET_STUDENT}' not matched by first name — using {fn} (ID={ben_id})", file=sys.stderr)
+
+        if not ben_id:
+            print("ParentVUE: no children found in ChildList.", file=sys.stderr)
+            return None
+
+        print(f"Fetching Gradebook for {TARGET_STUDENT} (ChildIntID={ben_id})...")
+
+        # ── Step 2: Gradebook for Ben ─────────────────────────────────────────
+        param_str = (
+            '&lt;Parms&gt;'
+            f'&lt;ChildIntID&gt;{ben_id}&lt;/ChildIntID&gt;'
+            '&lt;/Parms&gt;'
+        )
+        gradebook = soap_call('Gradebook', param_str)
+        if gradebook is None:
+            print("ParentVUE: Gradebook returned no result.", file=sys.stderr)
+            return None
         if gradebook.tag == 'RT_ERROR':
-            err_msg = gradebook.get('ERROR_MESSAGE', 'unknown error')
-            print(f"ParentVUE RT_ERROR: {err_msg}", file=sys.stderr)
-            # Try parent=0 if parent=1 failed (some districts use 0 for parent accounts)
-            print("Retrying with parent=0...", file=sys.stderr)
-            soap_body_p0 = soap_body.replace(b'<parent>1</parent>', b'<parent>0</parent>')
-            req2 = _urlreq.Request(
-                f"{LCPS_DISTRICT}/Service/PXPCommunication.asmx",
-                data=soap_body_p0,
-                headers={
-                    'Content-Type': 'text/xml; charset=utf-8',
-                    'SOAPAction': 'http://edupoint.com/webservices/ProcessWebServiceRequest',
-                },
-                method='POST'
-            )
-            with _urlreq.urlopen(req2, timeout=30) as resp2:
-                raw2 = resp2.read().decode('utf-8', errors='replace')
-            outer2 = ET.fromstring(_fix_xml_entities(raw2))
-            result_el2 = outer2.find('.//{http://edupoint.com/webservices/}ProcessWebServiceRequestResult')
-            if result_el2 is None:
-                result_el2 = outer2.find('.//ProcessWebServiceRequestResult')
-            if result_el2 is not None and result_el2.text:
-                inner2 = _fix_xml_entities(result_el2.text.strip())
-                gradebook = ET.fromstring(inner2)
-                print(f"  [debug p0] root tag: {gradebook.tag}, msg: {gradebook.get('ERROR_MESSAGE', 'none')}")
-            else:
-                print("parent=0 retry: no result element", file=sys.stderr)
-                return None
+            print(f"ParentVUE Gradebook error: {gradebook.get('ERROR_MESSAGE', '?')}", file=sys.stderr)
+            return None
 
+        # ── Step 3: Parse percentage-based courses (secondary school) ─────────
         grades = []
-        # ParentVUE uses <Subject> under <Subjects>; StudentVUE uses <Course> under <Courses>
-        elements = gradebook.findall('.//Subject') or gradebook.findall('.//Course')
-        for course in elements:
+        for course in gradebook.findall('.//Course'):
             name = course.get('Title', 'Unknown')
-            # ParentVUE puts the score directly on the Subject element
-            score_str = (
-                course.get('GradeCalculatedScoreRaw', '')
-                or course.get('CalculatedScoreRaw', '')
-            )
-            # Fallback: look inside the current Mark element
+            score_str = course.get('CalculatedScoreRaw', '') or course.get('GradeCalculatedScoreRaw', '')
             if not score_str:
                 mark = course.find('.//Mark')
                 score_str = mark.get('CalculatedScoreRaw', '') if mark is not None else ''
@@ -159,30 +174,22 @@ def fetch_via_parentvue() -> list[dict] | None:
                 score = round(float(score_str), 1)
             except (ValueError, TypeError):
                 continue
-
-            # Missing assignments
             has_missing = course.get('HasMissingAssignments', 'false').lower() == 'true'
             missing = 1 if has_missing else sum(
                 1 for a in course.findall('.//AssignmentGradeCalc')
                 if a.get('Points', '').strip() in ('', 'Not Graded')
                 and a.get('PointsPossible', '0').strip() not in ('0', '')
             )
-
             grades.append({"subject": name, "score": score, "missing": missing})
             print(f"  {name}: {score} ({missing} missing)")
 
         if grades:
-            print(f"ParentVUE: fetched {len(grades)} courses.")
+            print(f"ParentVUE: fetched {len(grades)} courses for {TARGET_STUDENT}.")
             return grades
 
-        # No courses found — dump structure so we can fix the path
-        print(f"[debug] 0 courses. root=<{gradebook.tag}> children={[c.tag for c in gradebook][:10]}")
-        for child in list(gradebook)[:4]:
-            print(f"[debug]   <{child.tag}> attrs={list(child.attrib.keys())[:4]} sub={[gc.tag for gc in child][:4]}")
-        # Dump XML structure to find course+score path
-        import xml.etree.ElementTree as _ET
-        raw_snippet = _ET.tostring(gradebook, encoding='unicode')[:3000]
-        print(f"[debug] inner XML (first 3000 chars):\n{raw_snippet}")
+        # 0 courses — dump gradebook XML for diagnosis
+        print(f"[debug] 0 courses. Gradebook XML (first 2000 chars):\n"
+              f"{ET.tostring(gradebook, encoding='unicode')[:2000]}")
         print("ParentVUE: parsed response but found 0 courses.", file=sys.stderr)
         return None
 
