@@ -129,42 +129,53 @@ def fetch_via_parentvue() -> list[dict] | None:
             print(f"ParentVUE ChildList error: {child_root.get('ERROR_MESSAGE', '?')}", file=sys.stderr)
             return None
 
-        ben_id = None
-        children = child_root.findall('.//Child')
-        if children:
-            print(f"[debug] Child attrs: {list(children[0].attrib.keys())}")
-        for child in children:
-            first = child.get('StudentFirstName', child.get('FirstName', child.get('ChildFirstName', '')))
-            last = child.get('StudentLastName', child.get('LastName', child.get('ChildLastName', '')))
-            cid = child.get('ChildIntID', child.get('ID', child.get('StudentIntID', '')))
-            print(f"  Child found: {first} {last} (ID={cid})")
+        # LCPS uses ChildFirstName and StudentGU (not StudentFirstName / ChildIntID)
+        ben_gu = None
+        ben_child_el = None
+        for child in child_root.findall('.//Child'):
+            first = child.get('ChildFirstName', '')
+            gu = child.get('StudentGU', '')
+            print(f"  Child found: {first} (StudentGU={gu})")
             if first.strip().lower() == TARGET_STUDENT.lower():
-                ben_id = cid
+                ben_gu = gu
+                ben_child_el = child
 
-        if not ben_id:
-            # Fall back: use first child and warn
-            first_child = child_root.find('.//Child')
-            if first_child is not None:
-                ben_id = first_child.get('ChildIntID', '')
-                fn = first_child.get('StudentFirstName', '?')
-                print(f"  '{TARGET_STUDENT}' not matched by first name — using {fn} (ID={ben_id})", file=sys.stderr)
+        if not ben_gu:
+            # Fall back: use first child
+            ben_child_el = child_root.find('.//Child')
+            if ben_child_el is not None:
+                ben_gu = ben_child_el.get('StudentGU', '')
+                fn = ben_child_el.get('ChildFirstName', '?')
+                print(f"  '{TARGET_STUDENT}' not matched — using {fn} (StudentGU={ben_gu})", file=sys.stderr)
 
-        if not ben_id:
+        if not ben_gu:
             print("ParentVUE: no children found in ChildList.", file=sys.stderr)
             return None
 
-        print(f"Fetching Gradebook for {TARGET_STUDENT} (ChildIntID={ben_id})...")
+        print(f"Fetching Gradebook for {TARGET_STUDENT} (StudentGU={ben_gu})...")
 
         # ── Step 2: Gradebook for Ben ─────────────────────────────────────────
         param_str = (
             '&lt;Parms&gt;'
-            f'&lt;ChildIntID&gt;{ben_id}&lt;/ChildIntID&gt;'
+            f'&lt;ChildGU&gt;{ben_gu}&lt;/ChildGU&gt;'
             '&lt;/Parms&gt;'
         )
         gradebook = soap_call('Gradebook', param_str)
         if gradebook is None:
-            print("ParentVUE: Gradebook returned no result.", file=sys.stderr)
-            return None
+            # Also try with OrgYearGU param (some Synergy versions use this)
+            oygu = ben_child_el.get('OrgYearGU', '') if ben_child_el is not None else ''
+            if oygu:
+                alt_param = (
+                    '&lt;Parms&gt;'
+                    f'&lt;ChildGU&gt;{ben_gu}&lt;/ChildGU&gt;'
+                    f'&lt;OrgYearGU&gt;{oygu}&lt;/OrgYearGU&gt;'
+                    '&lt;/Parms&gt;'
+                )
+                print(f"Retrying Gradebook with OrgYearGU={oygu}...")
+                gradebook = soap_call('Gradebook', alt_param)
+            if gradebook is None:
+                print("ParentVUE: Gradebook returned no result.", file=sys.stderr)
+                return None
         if gradebook.tag == 'RT_ERROR':
             print(f"ParentVUE Gradebook error: {gradebook.get('ERROR_MESSAGE', '?')}", file=sys.stderr)
             return None
