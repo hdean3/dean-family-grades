@@ -172,12 +172,16 @@ def fetch_via_parentvue() -> list[dict] | None:
             print(f"  Trying Gradebook param: {param_str[:80]}...")
             gradebook = soap_call('Gradebook', param_str)
             if gradebook is not None and gradebook.tag != 'RT_ERROR':
-                # Check this is actually secondary (percentage-based), not elementary
+                gb_type = gradebook.get('Type', '?')
+                top_children = [c.tag for c in list(gradebook)[:5]]
                 has_courses = bool(gradebook.findall('.//Course'))
-                print(f"  -> has_courses={has_courses}, root={gradebook.tag}")
+                print(f"  -> Type={gb_type}, top={top_children}, has_courses={has_courses}")
                 if has_courses:
                     break
-                gradebook = None  # got a result but wrong student (standards-based)
+                if gb_type not in ('Standards', '?') or gradebook.findall('.//Course') or 'Courses' in top_children:
+                    # Secondary gradebook found but empty (MP just started) — use it
+                    break
+                gradebook = None  # elementary standards-based, skip
             else:
                 gradebook = None
 
