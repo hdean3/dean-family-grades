@@ -52,13 +52,15 @@ def _fix_xml_entities(s: str) -> str:
 
 def fetch_via_parentvue() -> list[dict] | None:
     """
-    Fetch Ben's grades via direct SOAP to LCPS Synergy.
+    Fetch grades via direct SOAP to LCPS Synergy (parent=1 account).
 
-    Step 1: Call ChildList to enumerate students and find Ben's ChildIntID.
-    Step 2: Call Gradebook(ChildIntID=...) to fetch his high-school courses.
+    Known LCPS limitation: Synergy ignores all child-selection params
+    (ChildGU, StudentGU, OrgYearGU) and always returns the default child's
+    gradebook. For multi-child accounts this is unreliable — Gmail fallback
+    is preferred for LCPS until a session-based approach is implemented.
 
-    Bypasses the studentvue library entirely so we can fix malformed &
-    entities in the inner XML string before any XML parser sees it.
+    Returns a list of grade dicts if the default child is secondary
+    (percentage-based gradebook), otherwise None to trigger fallback.
     """
     import urllib.request as _urlreq
     import xml.etree.ElementTree as ET
@@ -67,14 +69,12 @@ def fetch_via_parentvue() -> list[dict] | None:
     password = os.environ.get("PARENTVUE_PASSWORD", "")
 
     if not username or not password:
-        print("ParentVUE credentials not set — falling back to Gmail.", file=sys.stderr)
         return None
 
     def xml_esc(s: str) -> str:
         return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
     def soap_call(method_name: str, param_str: str) -> ET.Element | None:
-        """POST a PXPWebServices SOAP call; return parsed inner XML root or None."""
         body = (
             "<?xml version='1.0' encoding='utf-8'?>"
             '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
@@ -105,91 +105,22 @@ def fetch_via_parentvue() -> list[dict] | None:
         with _urlreq.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode('utf-8', errors='replace')
         outer = ET.fromstring(_fix_xml_entities(raw))
-        result_el = (
-            outer.find('.//{http://edupoint.com/webservices/}ProcessWebServiceRequestResult')
-            or outer.find('.//ProcessWebServiceRequestResult')
-        )
-        if result_el is None or not result_el.text:
-            # Namespace-agnostic fallback (Python ET sometimes fails find() with namespace+SOAP envelope)
-            result_el = next((el for el in outer.iter() if el.tag.endswith('ProcessWebServiceRequestResult')), None)
-            if result_el is None or not result_el.text:
-                print(f"[debug] soap_call({method_name}): no result element found. Raw (500): {raw[:500]}")
-                return None
+        # Python ET sometimes fails namespace-qualified find() inside SOAP envelope
+        result_el = next((el for el in outer.iter() if el.tag.endswith('ProcessWebServiceRequestResult')), None)
+        if not result_el or not result_el.text:
+            return None
         return ET.fromstring(_fix_xml_entities(result_el.text.strip()))
 
     try:
-        print(f"Connecting to ParentVUE (direct SOAP) at {LCPS_DISTRICT}...")
-
-        # ── Step 1: ChildList — find Ben's ChildIntID ─────────────────────────
-        child_root = soap_call('ChildList', '&lt;Parms&gt;&lt;/Parms&gt;')
-        if child_root is None:
-            print("ParentVUE: ChildList returned no result.", file=sys.stderr)
-            return None
-        if child_root.tag == 'RT_ERROR':
-            print(f"ParentVUE ChildList error: {child_root.get('ERROR_MESSAGE', '?')}", file=sys.stderr)
+        gradebook = soap_call('Gradebook', '&lt;Parms&gt;&lt;/Parms&gt;')
+        if gradebook is None or gradebook.tag == 'RT_ERROR':
             return None
 
-        # LCPS uses ChildFirstName and StudentGU (not StudentFirstName / ChildIntID)
-        ben_gu = None
-        ben_child_el = None
-        for child in child_root.findall('.//Child'):
-            first = child.get('ChildFirstName', '')
-            gu = child.get('StudentGU', '')
-            print(f"  Child found: {first} (StudentGU={gu})")
-            if first.strip().lower() == TARGET_STUDENT.lower():
-                ben_gu = gu
-                ben_child_el = child
-
-        if not ben_gu:
-            # Fall back: use first child
-            ben_child_el = child_root.find('.//Child')
-            if ben_child_el is not None:
-                ben_gu = ben_child_el.get('StudentGU', '')
-                fn = ben_child_el.get('ChildFirstName', '?')
-                print(f"  '{TARGET_STUDENT}' not matched — using {fn} (StudentGU={ben_gu})", file=sys.stderr)
-
-        if not ben_gu:
-            print("ParentVUE: no children found in ChildList.", file=sys.stderr)
+        # Only use if this is a percentage-based (secondary) gradebook
+        if gradebook.get('Type') == 'Standards':
+            print("ParentVUE: default child has standards-based gradebook (elementary) — skipping.", file=sys.stderr)
             return None
 
-        ben_oygu = ben_child_el.get('OrgYearGU', '') if ben_child_el is not None else ''
-        print(f"Fetching Gradebook for {TARGET_STUDENT} (StudentGU={ben_gu}, OrgYearGU={ben_oygu})...")
-
-        # ── Step 2: Gradebook for Ben — try several param combos ─────────────
-        # LCPS Synergy may use OrgYearGU, ChildGU, or StudentGU to select child
-        param_attempts = []
-        if ben_oygu:
-            param_attempts.append(f'&lt;Parms&gt;&lt;OrgYearGU&gt;{ben_oygu}&lt;/OrgYearGU&gt;&lt;/Parms&gt;')
-            param_attempts.append(
-                f'&lt;Parms&gt;&lt;ChildGU&gt;{ben_gu}&lt;/ChildGU&gt;'
-                f'&lt;OrgYearGU&gt;{ben_oygu}&lt;/OrgYearGU&gt;&lt;/Parms&gt;'
-            )
-        param_attempts.append(f'&lt;Parms&gt;&lt;ChildGU&gt;{ben_gu}&lt;/ChildGU&gt;&lt;/Parms&gt;')
-        param_attempts.append(f'&lt;Parms&gt;&lt;StudentGU&gt;{ben_gu}&lt;/StudentGU&gt;&lt;/Parms&gt;')
-
-        gradebook = None
-        for param_str in param_attempts:
-            print(f"  Trying Gradebook param: {param_str[:80]}...")
-            gradebook = soap_call('Gradebook', param_str)
-            if gradebook is not None and gradebook.tag != 'RT_ERROR':
-                gb_type = gradebook.get('Type', '?')
-                top_children = [c.tag for c in list(gradebook)[:5]]
-                has_courses = bool(gradebook.findall('.//Course'))
-                print(f"  -> Type={gb_type}, top={top_children}, has_courses={has_courses}")
-                if has_courses:
-                    break
-                if gb_type not in ('Standards', '?') or gradebook.findall('.//Course') or 'Courses' in top_children:
-                    # Secondary gradebook found but empty (MP just started) — use it
-                    break
-                gradebook = None  # elementary standards-based, skip
-            else:
-                gradebook = None
-
-        if gradebook is None:
-            print("ParentVUE: Gradebook returned no result for any param combo.", file=sys.stderr)
-            return None
-
-        # ── Step 3: Parse percentage-based courses (secondary school) ─────────
         grades = []
         for course in gradebook.findall('.//Course'):
             name = course.get('Title', 'Unknown')
@@ -211,17 +142,12 @@ def fetch_via_parentvue() -> list[dict] | None:
             print(f"  {name}: {score} ({missing} missing)")
 
         if grades:
-            print(f"ParentVUE: fetched {len(grades)} courses for {TARGET_STUDENT}.")
+            print(f"ParentVUE: fetched {len(grades)} courses.")
             return grades
-
-        # 0 courses — dump gradebook XML for diagnosis
-        print(f"[debug] 0 courses. Gradebook XML (first 2000 chars):\n"
-              f"{ET.tostring(gradebook, encoding='unicode')[:2000]}")
-        print("ParentVUE: parsed response but found 0 courses.", file=sys.stderr)
         return None
 
     except Exception as e:
-        print(f"ParentVUE API error: {e} — falling back to Gmail.", file=sys.stderr)
+        print(f"ParentVUE API error: {e}", file=sys.stderr)
         return None
 
 
