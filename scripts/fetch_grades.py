@@ -152,32 +152,37 @@ def fetch_via_parentvue() -> list[dict] | None:
             print("ParentVUE: no children found in ChildList.", file=sys.stderr)
             return None
 
-        print(f"Fetching Gradebook for {TARGET_STUDENT} (StudentGU={ben_gu})...")
+        ben_oygu = ben_child_el.get('OrgYearGU', '') if ben_child_el is not None else ''
+        print(f"Fetching Gradebook for {TARGET_STUDENT} (StudentGU={ben_gu}, OrgYearGU={ben_oygu})...")
 
-        # ── Step 2: Gradebook for Ben ─────────────────────────────────────────
-        param_str = (
-            '&lt;Parms&gt;'
-            f'&lt;ChildGU&gt;{ben_gu}&lt;/ChildGU&gt;'
-            '&lt;/Parms&gt;'
-        )
-        gradebook = soap_call('Gradebook', param_str)
+        # ── Step 2: Gradebook for Ben — try several param combos ─────────────
+        # LCPS Synergy may use OrgYearGU, ChildGU, or StudentGU to select child
+        param_attempts = []
+        if ben_oygu:
+            param_attempts.append(f'&lt;Parms&gt;&lt;OrgYearGU&gt;{ben_oygu}&lt;/OrgYearGU&gt;&lt;/Parms&gt;')
+            param_attempts.append(
+                f'&lt;Parms&gt;&lt;ChildGU&gt;{ben_gu}&lt;/ChildGU&gt;'
+                f'&lt;OrgYearGU&gt;{ben_oygu}&lt;/OrgYearGU&gt;&lt;/Parms&gt;'
+            )
+        param_attempts.append(f'&lt;Parms&gt;&lt;ChildGU&gt;{ben_gu}&lt;/ChildGU&gt;&lt;/Parms&gt;')
+        param_attempts.append(f'&lt;Parms&gt;&lt;StudentGU&gt;{ben_gu}&lt;/StudentGU&gt;&lt;/Parms&gt;')
+
+        gradebook = None
+        for param_str in param_attempts:
+            print(f"  Trying Gradebook param: {param_str[:80]}...")
+            gradebook = soap_call('Gradebook', param_str)
+            if gradebook is not None and gradebook.tag != 'RT_ERROR':
+                # Check this is actually secondary (percentage-based), not elementary
+                has_courses = bool(gradebook.findall('.//Course'))
+                print(f"  -> has_courses={has_courses}, root={gradebook.tag}")
+                if has_courses:
+                    break
+                gradebook = None  # got a result but wrong student (standards-based)
+            else:
+                gradebook = None
+
         if gradebook is None:
-            # Also try with OrgYearGU param (some Synergy versions use this)
-            oygu = ben_child_el.get('OrgYearGU', '') if ben_child_el is not None else ''
-            if oygu:
-                alt_param = (
-                    '&lt;Parms&gt;'
-                    f'&lt;ChildGU&gt;{ben_gu}&lt;/ChildGU&gt;'
-                    f'&lt;OrgYearGU&gt;{oygu}&lt;/OrgYearGU&gt;'
-                    '&lt;/Parms&gt;'
-                )
-                print(f"Retrying Gradebook with OrgYearGU={oygu}...")
-                gradebook = soap_call('Gradebook', alt_param)
-            if gradebook is None:
-                print("ParentVUE: Gradebook returned no result.", file=sys.stderr)
-                return None
-        if gradebook.tag == 'RT_ERROR':
-            print(f"ParentVUE Gradebook error: {gradebook.get('ERROR_MESSAGE', '?')}", file=sys.stderr)
+            print("ParentVUE: Gradebook returned no result for any param combo.", file=sys.stderr)
             return None
 
         # ── Step 3: Parse percentage-based courses (secondary school) ─────────
