@@ -39,6 +39,37 @@ LCPS_DISTRICT = os.environ.get("PARENTVUE_DISTRICT", "https://portal.lcps.org")
 
 # ── ParentVUE API (primary) ───────────────────────────────────────────────────
 
+def _patch_requests_xml_fix() -> None:
+    """
+    Monkey-patch requests.Session.post so malformed XML from LCPS Synergy
+    (unescaped & entities) is fixed before zeep/lxml tries to parse it.
+    LCPS portal returns XML like &amp without the trailing semicolon, which
+    causes 'EntityRef: expecting ;' parse failures.
+    """
+    try:
+        import requests as _req
+        _orig_post = _req.Session.post
+
+        def _fixed_post(self, *args, **kwargs):
+            resp = _orig_post(self, *args, **kwargs)
+            ct = resp.headers.get("content-type", "")
+            if "xml" in ct or "text/html" in ct:
+                try:
+                    fixed = re.sub(
+                        r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)',
+                        '&amp;',
+                        resp.text
+                    )
+                    resp._content = fixed.encode(resp.encoding or "utf-8")
+                except Exception:
+                    pass
+            return resp
+
+        _req.Session.post = _fixed_post
+    except Exception:
+        pass  # Don't block on patch failure
+
+
 def fetch_via_parentvue() -> list[dict] | None:
     """Fetch grades directly from ParentVUE/Synergy API."""
     username = os.environ.get("PARENTVUE_USERNAME", "")
@@ -54,6 +85,9 @@ def fetch_via_parentvue() -> list[dict] | None:
         print("studentvue not installed — falling back to Gmail.", file=sys.stderr)
         return None
 
+    # Fix LCPS Synergy returning malformed XML with unescaped & entities
+    _patch_requests_xml_fix()
+
     try:
         print(f"Connecting to ParentVUE at {LCPS_DISTRICT}...")
         sv = studentvue.StudentVue(username, password, LCPS_DISTRICT)
@@ -62,15 +96,27 @@ def fetch_via_parentvue() -> list[dict] | None:
         grades = []
         for course in gradebook.get("Gradebook", {}).get("Courses", {}).get("Course", []):
             name = course.get("@Title", "Unknown")
-            # Period from @Period attribute, e.g. "1"
             mark = course.get("Marks", {}).get("Mark", {})
             if isinstance(mark, list):
                 mark = mark[0]
             score_str = mark.get("@CalculatedScoreRaw", "")
+            # Count missing assignments from AssignmentGradeCalc entries
+            missing = 0
+            try:
+                assignments = (
+                    course.get("Marks", {}).get("Mark", {})
+                          .get("GradeCalculationSummary", {})
+                          .get("AssignmentGradeCalc", [])
+                )
+                if isinstance(assignments, dict):
+                    assignments = [assignments]
+                missing = sum(1 for a in assignments if a.get("@Points", "") in ("", "0") and a.get("@PointsPossible", "0") != "0")
+            except Exception:
+                pass
             try:
                 score = round(float(score_str), 1)
-                grades.append({"subject": name, "score": score, "missing": 0})
-                print(f"  {name}: {score}")
+                grades.append({"subject": name, "score": score, "missing": missing})
+                print(f"  {name}: {score} ({missing} missing)")
             except (ValueError, TypeError):
                 pass
 
