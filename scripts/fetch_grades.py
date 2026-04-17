@@ -331,11 +331,17 @@ def main():
     # Try ParentVUE API first (real-time)
     grades = fetch_via_parentvue()
 
-    # Fall back to Gmail email parsing
+    # Fall back to Gmail email parsing — but ONLY if no grades.json exists yet.
+    # If grades.json already has data (e.g. manually corrected), keep it.
+    # The LCPS email can be stale or slightly inaccurate; don't let it overwrite
+    # verified grades. Re-enable email fallback once the API works for Ben.
     if not grades:
+        if OUTPUT_PATH.exists():
+            print("ParentVUE unavailable. grades.json already exists — keeping current data.", file=sys.stderr)
+            sys.exit(0)
         body = fetch_latest_grade_email()
         if not body:
-            print("No data source available. Keeping existing grades.json.", file=sys.stderr)
+            print("No data source available.", file=sys.stderr)
             sys.exit(0)
         if "<html" in body.lower() or "<table" in body.lower():
             grades = parse_lcps_email(body)
@@ -344,7 +350,6 @@ def main():
 
     if not grades:
         print("WARNING: Could not parse any grades.", file=sys.stderr)
-        print(f"Check {RAW_DEBUG_PATH} for raw email content.", file=sys.stderr)
         sys.exit(1)
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
