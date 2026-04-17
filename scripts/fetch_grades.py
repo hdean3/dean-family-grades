@@ -179,16 +179,10 @@ def fetch_via_parentvue() -> list[dict] | None:
         print(f"[debug] 0 courses. root=<{gradebook.tag}> children={[c.tag for c in gradebook][:10]}")
         for child in list(gradebook)[:4]:
             print(f"[debug]   <{child.tag}> attrs={list(child.attrib.keys())[:4]} sub={[gc.tag for gc in child][:4]}")
-        # Dump first Subject's full attribute map so we can find the score field
-        subjects = gradebook.findall('.//Subject')
-        if subjects:
-            s0 = subjects[0]
-            print(f"[debug] First <Subject> ALL attrs: {dict(s0.attrib)}")
-            mark0 = s0.find('.//Mark')
-            if mark0 is not None:
-                print(f"[debug] First <Mark> ALL attrs: {dict(mark0.attrib)}")
-            else:
-                print(f"[debug] No <Mark> under first Subject. Sub-elements: {[c.tag for c in s0][:8]}")
+        # Dump XML structure to find course+score path
+        import xml.etree.ElementTree as _ET
+        raw_snippet = _ET.tostring(gradebook, encoding='unicode')[:3000]
+        print(f"[debug] inner XML (first 3000 chars):\n{raw_snippet}")
         print("ParentVUE: parsed response but found 0 courses.", file=sys.stderr)
         return None
 
