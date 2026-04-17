@@ -37,41 +37,22 @@ IMAP_HOST = "imap.gmail.com"
 LCPS_DISTRICT = os.environ.get("PARENTVUE_DISTRICT", "https://portal.lcps.org")
 
 
-# ── ParentVUE API (primary) ───────────────────────────────────────────────────
+# ── ParentVUE API (primary — direct SOAP, no studentvue library) ─────────────
 
-def _patch_requests_xml_fix() -> None:
-    """
-    Monkey-patch requests.Session.post so malformed XML from LCPS Synergy
-    (unescaped & entities) is fixed before zeep/lxml tries to parse it.
-    LCPS portal returns XML like &amp without the trailing semicolon, which
-    causes 'EntityRef: expecting ;' parse failures.
-    """
-    try:
-        import requests as _req
-        _orig_post = _req.Session.post
-
-        def _fixed_post(self, *args, **kwargs):
-            resp = _orig_post(self, *args, **kwargs)
-            ct = resp.headers.get("content-type", "")
-            if "xml" in ct or "text/html" in ct:
-                try:
-                    fixed = re.sub(
-                        r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)',
-                        '&amp;',
-                        resp.text
-                    )
-                    resp._content = fixed.encode(resp.encoding or "utf-8")
-                except Exception:
-                    pass
-            return resp
-
-        _req.Session.post = _fixed_post
-    except Exception:
-        pass  # Don't block on patch failure
+def _fix_xml_entities(s: str) -> str:
+    """Replace bare & not part of a valid XML entity reference."""
+    return re.sub(r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)', '&amp;', s)
 
 
 def fetch_via_parentvue() -> list[dict] | None:
-    """Fetch grades directly from ParentVUE/Synergy API."""
+    """
+    Fetch grades via direct SOAP to LCPS Synergy. Bypasses the studentvue
+    library entirely so we can fix malformed & entities in the inner XML
+    string before any XML parser sees it.
+    """
+    import urllib.request as _urlreq
+    import xml.etree.ElementTree as ET
+
     username = os.environ.get("PARENTVUE_USERNAME", "")
     password = os.environ.get("PARENTVUE_PASSWORD", "")
 
@@ -79,54 +60,88 @@ def fetch_via_parentvue() -> list[dict] | None:
         print("ParentVUE credentials not set — falling back to Gmail.", file=sys.stderr)
         return None
 
-    try:
-        import studentvue
-    except ImportError:
-        print("studentvue not installed — falling back to Gmail.", file=sys.stderr)
-        return None
+    def xml_esc(s: str) -> str:
+        return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
 
-    # Fix LCPS Synergy returning malformed XML with unescaped & entities
-    _patch_requests_xml_fix()
+    soap_body = (
+        "<?xml version='1.0' encoding='utf-8'?>"
+        '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+        'xmlns:xsd="http://www.w3.org/2001/XMLSchema" '
+        'xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
+        '<soap:Body>'
+        '<ProcessWebServiceRequest xmlns="http://edupoint.com/webservices/">'
+        f'<userID>{xml_esc(username)}</userID>'
+        f'<password>{xml_esc(password)}</password>'
+        '<skipLoginLog>1</skipLoginLog>'
+        '<parent>1</parent>'
+        '<webServiceHandleName>PXPWebServices</webServiceHandleName>'
+        '<methodName>Gradebook</methodName>'
+        '<paramStr>&lt;Parms&gt;&lt;/Parms&gt;</paramStr>'
+        '</ProcessWebServiceRequest>'
+        '</soap:Body>'
+        '</soap:Envelope>'
+    ).encode('utf-8')
 
     try:
-        print(f"Connecting to ParentVUE at {LCPS_DISTRICT}...")
-        sv = studentvue.StudentVue(username, password, LCPS_DISTRICT)
-        gradebook = sv.get_gradebook()
+        print(f"Connecting to ParentVUE (direct SOAP) at {LCPS_DISTRICT}...")
+        req = _urlreq.Request(
+            f"{LCPS_DISTRICT}/Service/PXPCommunication.asmx",
+            data=soap_body,
+            headers={
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'http://edupoint.com/webservices/ProcessWebServiceRequest',
+            },
+            method='POST'
+        )
+        with _urlreq.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode('utf-8', errors='replace')
+
+        # Fix outer SOAP XML entities, then parse
+        outer = ET.fromstring(_fix_xml_entities(raw))
+
+        # Find the result element (contains another XML doc as escaped text)
+        result_el = outer.find('.//{http://edupoint.com/webservices/}ProcessWebServiceRequestResult')
+        if result_el is None:
+            result_el = outer.find('.//ProcessWebServiceRequestResult')
+        if result_el is None or not result_el.text:
+            print("ParentVUE: no result element in SOAP response.", file=sys.stderr)
+            return None
+
+        # Fix the INNER XML string — this is where LCPS's bare & entities live
+        inner_xml = _fix_xml_entities(result_el.text.strip())
+        gradebook = ET.fromstring(inner_xml)
 
         grades = []
-        for course in gradebook.get("Gradebook", {}).get("Courses", {}).get("Course", []):
-            name = course.get("@Title", "Unknown")
-            mark = course.get("Marks", {}).get("Mark", {})
-            if isinstance(mark, list):
-                mark = mark[0]
-            score_str = mark.get("@CalculatedScoreRaw", "")
-            # Count missing assignments from AssignmentGradeCalc entries
-            missing = 0
-            try:
-                assignments = (
-                    course.get("Marks", {}).get("Mark", {})
-                          .get("GradeCalculationSummary", {})
-                          .get("AssignmentGradeCalc", [])
-                )
-                if isinstance(assignments, dict):
-                    assignments = [assignments]
-                missing = sum(1 for a in assignments if a.get("@Points", "") in ("", "0") and a.get("@PointsPossible", "0") != "0")
-            except Exception:
-                pass
+        for course in gradebook.findall('.//Course'):
+            name = course.get('Title', 'Unknown')
+            mark = course.find('.//Mark')
+            if mark is None:
+                continue
+            score_str = mark.get('CalculatedScoreRaw', '')
             try:
                 score = round(float(score_str), 1)
-                grades.append({"subject": name, "score": score, "missing": missing})
-                print(f"  {name}: {score} ({missing} missing)")
             except (ValueError, TypeError):
-                pass
+                continue
+
+            missing = sum(
+                1 for a in mark.findall('.//AssignmentGradeCalc')
+                if a.get('Points', '').strip() in ('', 'Not Graded')
+                and a.get('PointsPossible', '0').strip() not in ('0', '')
+            )
+
+            grades.append({"subject": name, "score": score, "missing": missing})
+            print(f"  {name}: {score} ({missing} missing)")
 
         if grades:
             print(f"ParentVUE: fetched {len(grades)} courses.")
             return grades
+
+        print("ParentVUE: parsed response but found 0 courses.", file=sys.stderr)
+        return None
+
     except Exception as e:
         print(f"ParentVUE API error: {e} — falling back to Gmail.", file=sys.stderr)
-
-    return None
+        return None
 
 
 # ── Gmail IMAP fallback ───────────────────────────────────────────────────────
