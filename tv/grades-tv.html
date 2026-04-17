@@ -12,8 +12,8 @@
   10-foot UI design: min 2.5rem text, no hover states, keyboard-navigable,
   high contrast, auto-refresh every 5 minutes.
 
-  Deployment: Served by tv_server.py (Railway) at /tv
-  Grade data:  Fetched from /api/grades (reads data/grades.json)
+  Deployment: GitHub Pages — https://hdean3.github.io/dean-family-grades/tv/grades-tv.html
+  Grade data:  Fetched from raw.githubusercontent.com/hdean3/dean-family-grades/main/data/grades.json
 -->
 <html lang="en">
 <head>
@@ -342,11 +342,12 @@
       const refreshNote  = document.getElementById('refresh-note');
 
       try {
-        // Try the Flask API first (Railway deployment)
-        const r = await fetch('/api/grades');
-        if (!r.ok) throw new Error('API returned ' + r.status);
+        // Fetch grades.json directly from GitHub (no server needed — GitHub Pages deployment)
+        const url = 'https://raw.githubusercontent.com/hdean3/dean-family-grades/main/data/grades.json?_=' + Date.now();
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('GitHub returned ' + r.status);
         const data = await r.json();
-        renderGrades(data.grades || data);
+        renderGrades(Array.isArray(data) ? data : (data.grades || data));
 
         const now = new Date().toLocaleString('en-US', {
           month: 'short', day: 'numeric',
