@@ -110,8 +110,14 @@ def fetch_via_parentvue() -> list[dict] | None:
             or outer.find('.//ProcessWebServiceRequestResult')
         )
         if result_el is None or not result_el.text:
-            print(f"[debug] soap_call({method_name}): no result_el. Raw response (500 chars): {raw[:500]}")
-            return None
+            tags = [el.tag for el in outer.iter()][:10]
+            print(f"[debug] soap_call({method_name}): result_el={result_el}, outer.tag={outer.tag}, all_tags={tags}")
+            # Namespace-agnostic fallback
+            result_el = next((el for el in outer.iter() if el.tag.endswith('ProcessWebServiceRequestResult')), None)
+            if result_el is None or not result_el.text:
+                print(f"[debug] fallback also found nothing. Raw (500): {raw[:500]}")
+                return None
+            print(f"[debug] fallback found result_el via iter()")
         return ET.fromstring(_fix_xml_entities(result_el.text.strip()))
 
     try:
