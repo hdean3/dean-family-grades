@@ -166,6 +166,10 @@ def fetch_via_parentvue() -> list[dict] | None:
             print(f"ParentVUE: fetched {len(grades)} courses.")
             return grades
 
+        # No courses found — dump structure so we can fix the path
+        print(f"[debug] 0 courses. root=<{gradebook.tag}> children={[c.tag for c in gradebook][:10]}")
+        for child in list(gradebook)[:4]:
+            print(f"[debug]   <{child.tag}> attrs={list(child.attrib.keys())[:4]} sub={[gc.tag for gc in child][:4]}")
         print("ParentVUE: parsed response but found 0 courses.", file=sys.stderr)
         return None
 
