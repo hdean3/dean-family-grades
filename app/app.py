@@ -4,17 +4,39 @@ import json
 import os
 from pathlib import Path
 
-# --- 1. CONFIGURATION ---
-STUDENT_NAME = os.getenv("STUDENT_NAME", "Ben Dean")
-rates = {
-    "A+": 150.0, "A": 125.0, "A-": 100.0,
-    "B+": 75.0,  "B": 50.0,  "B-": 25.0,
-}
+# --- 1. STUDENT MANIFEST & PATHS ---
+DATA_ROOT  = Path(__file__).parent.parent / "data"
+STUD_ROOT  = DATA_ROOT / "students"
+STUD_CFG   = STUD_ROOT / "students.json"
 
-GMU_THRESHOLD = 3.25   # GMU guaranteed admission by end of junior year
+def load_student_manifest():
+    if STUD_CFG.exists():
+        with open(STUD_CFG) as f:
+            return json.load(f)
+    return {}
+
+manifest = load_student_manifest()
+student_ids = list(manifest.keys()) if manifest else ["ben"]
+
+st.set_page_config(page_title="ScholarDash — Dean Family", layout="wide")
+
+# Sidebar: student selector (always visible so you can switch)
+st.sidebar.header("👨‍👩‍👧‍👦 ScholarDash")
+selected_id = st.sidebar.selectbox(
+    "Student",
+    student_ids,
+    format_func=lambda sid: manifest[sid]["name"] if sid in manifest else sid.title(),
+    index=0,
+)
+
+cfg          = manifest.get(selected_id, {})
+STUDENT_NAME = cfg.get("name", selected_id.title())
+rates        = cfg.get("rates", {"A+": 150.0, "A": 125.0, "A-": 100.0,
+                                  "B+": 75.0,  "B": 50.0,  "B-": 25.0})
+GMU_THRESHOLD = cfg.get("gmu_threshold")  # None for younger kids
 
 VCCS_SCHOOLS = [
-    {"school": "George Mason University",  "min_gpa": 3.0, "notes": "If direct admission missed, NOVA→GMU transfer. Same destination."},
+    {"school": "George Mason University",  "min_gpa": 3.0, "notes": "NOVA→GMU transfer. Same destination."},
     {"school": "James Madison University", "min_gpa": 3.0, "notes": "Most programs."},
     {"school": "Virginia Commonwealth",    "min_gpa": 3.0, "notes": "Most programs."},
     {"school": "Old Dominion University",  "min_gpa": 3.0, "notes": "Most programs."},
@@ -24,10 +46,10 @@ VCCS_SCHOOLS = [
     {"school": "UVA",                      "min_gpa": None, "notes": "NOT covered by VCCS GAA."},
 ]
 
-# LCPS official grading scale (Stone Bridge HS / Loudoun County)
+
+# --- 2. LCPS GRADING SCALE ---
+# A+ = 4.3 in LCPS (verified from official transcript — not the standard 4.0)
 def score_to_letter_and_gpa(score):
-    """Official LCPS grading scale (Stone Bridge HS).
-    NOTE: A+ = 4.3 in LCPS, not 4.0 — verified from official transcript grading scale."""
     if score >= 98: return "A+", 4.3
     if score >= 93: return "A",  4.0
     if score >= 90: return "A-", 3.7
@@ -44,7 +66,6 @@ def score_to_letter_and_gpa(score):
 
 
 def get_grade_info(score):
-    """Reward system — returns letter, earnings, and GPA points."""
     letter, gpa_pts = score_to_letter_and_gpa(score)
     earnings = rates.get(letter, 0.0)
     return letter, earnings, gpa_pts
@@ -64,21 +85,33 @@ st.markdown(
 )
 
 
-# --- 2. DATA ENGINE ---
+# --- 3. DATA LOADING (student-aware) ---
+def student_data_path(filename):
+    """Prefer data/students/{id}/filename; fall back to data/filename for Ben."""
+    student_path = STUD_ROOT / selected_id / filename
+    if student_path.exists():
+        return student_path
+    legacy = DATA_ROOT / filename
+    if legacy.exists():
+        return legacy
+    return None
+
+
 def load_data():
-    path = Path(__file__).parent.parent / "data" / "grades.json"
-    if not path.exists():
+    path = student_data_path("grades.json")
+    if not path:
         return None
     try:
         with open(path) as f:
-            return pd.DataFrame(json.load(f))
+            data = json.load(f)
+        return pd.DataFrame(data) if data else None
     except Exception:
         return None
 
 
 def load_history():
-    path = Path(__file__).parent.parent / "data" / "grade_history.json"
-    if not path.exists():
+    path = student_data_path("grade_history.json")
+    if not path:
         return []
     try:
         with open(path) as f:
@@ -124,57 +157,64 @@ def compute_year_gpa(courses, weighted=False):
     return round(total_pts / total_cred, 3)
 
 
-# --- 3. UI RENDERING ---
-st.set_page_config(page_title=f"{STUDENT_NAME}: Rewards", layout="wide")
+# --- 4. RENDER ---
 current_df = load_data()
-history = load_history()
+history    = load_history()
 cum_gpa_uw, total_credits = compute_cumulative_gpa(history, weighted=False)
 cum_gpa_w,  _             = compute_cumulative_gpa(history, weighted=True)
 
-st.title(f"\U0001f393 {STUDENT_NAME}: Semester Rewards")
+st.title(f"\U0001f393 {STUDENT_NAME}: ScholarDash")
 
-if current_df is not None:
+if current_df is None or current_df.empty:
+    st.info(f"No current grades loaded for {STUDENT_NAME}. "
+            f"Add scores to `data/students/{selected_id}/grades.json` to get started.")
+    if history:
+        # Still show historical data even if no current-semester grades
+        pass
+    else:
+        st.stop()
+
+if current_df is not None and not current_df.empty:
     if 'missing' not in current_df.columns:
         current_df['missing'] = 0
 
-    # ── Sidebar: Motivation Simulator ───────────────────────────────────────
+    # ── Sidebar: Motivation Simulator ─────────────────────────────────────────
+    st.sidebar.markdown("---")
     st.sidebar.header("\U0001f680 Motivation Simulator")
-    st.sidebar.caption("Drag a slider to see how improving each class changes your earnings:")
+    st.sidebar.caption("Drag to see how improving each class changes earnings:")
     boosts = {}
     for _, row in current_df.iterrows():
         label = row['subject'][:24] + ('…' if len(row['subject']) > 24 else '')
         boosts[row['subject']] = st.sidebar.slider(label, 0, 15, 0, key=f"boost_{row['subject']}")
-    st.sidebar.markdown("---")
-    st.sidebar.warning("\U0001f9b7 **Reminder**: Ben, put the bands on your braces!")
 
-    current_df['boost'] = current_df['subject'].map(boosts)
+    if selected_id == "ben":
+        st.sidebar.markdown("---")
+        st.sidebar.warning("\U0001f9b7 **Reminder**: Ben, put the bands on your braces!")
+
+    current_df['boost']         = current_df['subject'].map(boosts)
     current_df['Display Score'] = (current_df['score'] + current_df['boost']).clip(upper=100)
     grade_data = current_df['Display Score'].apply(get_grade_info)
     current_df['Grade'], current_df['Earnings'], current_df['Points'] = zip(*grade_data)
 
-    # ── Summary metrics ──────────────────────────────────────────────────────
+    # ── Summary metrics ────────────────────────────────────────────────────────
     avg_score   = current_df['score'].mean()
     _, _, gpa_v = get_grade_info(avg_score)
-
-    has_all_years = all(year.get("courses") for year in history)
-    gpa_label = "Cumul. GPA (UW)" if cum_gpa_uw else "Cumul. GPA"
+    gpa_label   = "Cumul. GPA (UW)" if cum_gpa_uw else "Cumul. GPA"
 
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Current Earnings",   f"${current_df['Earnings'].sum():,.2f}")
-    m2.metric("Max Potential",      "$1,000.00")
-    m3.metric("11th Grade GPA",     f"{gpa_v:.2f}")
+    m1.metric("Current Earnings", f"${current_df['Earnings'].sum():,.2f}")
+    m2.metric("Max Potential",    f"${sum(rates.values()):,.2f}")
+    m3.metric("This Semester",    f"{gpa_v:.2f}")
     if cum_gpa_uw:
-        delta_color = "normal" if cum_gpa_uw >= GMU_THRESHOLD else "inverse"
-        m4.metric(gpa_label,        f"{cum_gpa_uw:.3f}",
-                  delta=f"{'✅' if cum_gpa_uw >= GMU_THRESHOLD else '⚠️'} GMU needs {GMU_THRESHOLD}")
-        m5.metric("Cumul. GPA (W)", f"{cum_gpa_w:.3f}",
-                  help="Weighted: Honors +0.5, AP +1.0")
+        m4.metric(gpa_label, f"{cum_gpa_uw:.3f}",
+                  delta=f"{'✅' if (GMU_THRESHOLD and cum_gpa_uw >= GMU_THRESHOLD) else ('⚠️ ' + str(GMU_THRESHOLD) + ' GMU' if GMU_THRESHOLD else '')}")
+        m5.metric("Cumul. GPA (W)", f"{cum_gpa_w:.3f}", help="Weighted: Honors +0.5, AP +1.0")
     else:
-        m4.metric("Cumul. GPA", "Needs 9th grade →")
-        m5.metric("GMU Target", f"{GMU_THRESHOLD}")
+        m4.metric("Cumul. GPA", "—")
+        m5.metric("GMU Target", f"{GMU_THRESHOLD}" if GMU_THRESHOLD else "N/A")
 
-    # ── Reward Breakdown — 11th Grade ────────────────────────────────────────
-    st.subheader("\U0001f4b0 Reward Breakdown — 11th Grade Final")
+    # ── Reward Breakdown ───────────────────────────────────────────────────────
+    st.subheader("\U0001f4b0 Reward Breakdown — Current Semester")
     key_items = [
         ('#d4edda', 'A &nbsp;(90+)'), ('#cce5ff', 'B &nbsp;(80–89)'),
         ('#fff3cd', 'C &nbsp;(70–79)'), ('#ffe0e0', 'D / F &nbsp;(&lt;70)'),
@@ -191,19 +231,20 @@ if current_df is not None:
 
     missing_vals   = current_df['missing'].values
     display_scores = current_df['Display Score'].values
-    display_df     = current_df[['subject', 'Display Score', 'Grade', 'Earnings']]
 
     def highlight_row(row):
         color = row_color(display_scores[row.name], missing_vals[row.name])
         return [f'background-color: {color}'] * len(row)
 
     st.dataframe(
-        display_df.style.apply(highlight_row, axis=1).format({"Earnings": "${:,.2f}"}),
+        current_df[['subject', 'Display Score', 'Grade', 'Earnings']]
+        .style.apply(highlight_row, axis=1).format({"Earnings": "${:,.2f}"}),
         hide_index=True,
     )
     st.markdown("---")
 
-    # ── Grade History & Cumulative GPA ───────────────────────────────────────
+# ── Grade History ──────────────────────────────────────────────────────────────
+if history:
     st.header("\U0001f4ca Grade History & Cumulative GPA")
 
     for year_data in history:
@@ -230,13 +271,13 @@ if current_df is not None:
             letter, pts = score_to_letter_and_gpa(score)
             w_pts = min(pts + 0.5, 5.0) if c.get("honors") else pts
             rows.append({
-                "Subject":    c["subject"],
-                "Score":      c["note"] if c.get("note") else score,
-                "Grade":      letter,
-                "Credits":    c.get("credits", 1.0),
-                "GPA (UW)":   pts,
-                "GPA (W)":    w_pts,
-                "Honors":     "H" if c.get("honors") else "",
+                "Subject":  c["subject"],
+                "Score":    c["note"] if c.get("note") else score,
+                "Grade":    letter,
+                "Credits":  c.get("credits", 1.0),
+                "GPA (UW)": pts,
+                "GPA (W)":  w_pts,
+                "Honors":   "H" if c.get("honors") else "",
             })
         if rows:
             df = pd.DataFrame(rows)
@@ -245,28 +286,24 @@ if current_df is not None:
 
     st.markdown("---")
     if cum_gpa_uw:
-        gmu_gap = GMU_THRESHOLD - cum_gpa_uw
-        if gmu_gap <= 0:
-            st.success(f"✅ **Cumulative GPA (Unweighted): {cum_gpa_uw:.3f}** — Meets GMU {GMU_THRESHOLD} guaranteed admission threshold!")
-        else:
-            st.warning(
-                f"⚠️ **Cumulative GPA (Unweighted): {cum_gpa_uw:.3f}** — "
-                f"**{gmu_gap:.3f} points below GMU {GMU_THRESHOLD} threshold.** "
-                f"Senior year is critical."
-            )
+        if GMU_THRESHOLD:
+            gmu_gap = GMU_THRESHOLD - cum_gpa_uw
+            if gmu_gap <= 0:
+                st.success(f"✅ **Cumulative GPA (UW): {cum_gpa_uw:.3f}** — Meets GMU {GMU_THRESHOLD} guaranteed admission threshold!")
+            else:
+                st.warning(
+                    f"⚠️ **Cumulative GPA (UW): {cum_gpa_uw:.3f}** — "
+                    f"**{gmu_gap:.3f} pts below GMU {GMU_THRESHOLD} threshold.** Senior year is critical."
+                )
         st.info(f"Weighted GPA (Honors/AP boost): **{cum_gpa_w:.3f}** across {total_credits:.1f} credits")
-        if not all(year.get("courses") for year in history):
-            st.caption("⚠️ 9th grade grades not yet entered — cumulative GPA above is 10th + 11th only. "
-                       "Add from ParentVue Documents → Year End Report Card (06/24/2024).")
-    else:
-        st.info("Add 9th grade scores to `data/grade_history.json` to compute cumulative GPA.")
 
     st.markdown("---")
 
-    # ── GMU Guaranteed Admission ─────────────────────────────────────────────
+# ── GMU + VCCS sections (HS students only) ────────────────────────────────────
+if GMU_THRESHOLD and history:
     st.header("\U0001f3eb GMU Guaranteed Admission — Direct Freshman Path")
     st.markdown(
-        f"**GMU guarantees freshman admission to Virginia HS students with cumulative GPA ≥ {GMU_THRESHOLD} "
+        f"**GMU guarantees freshman admission to VA HS students with cumulative GPA ≥ {GMU_THRESHOLD} "
         f"by end of junior year.** Ben just finished junior year — this is the evaluation point. "
         f"Official LCPS transcript GPA as of Feb 12, 2026 (mid-junior year): **3.18 / 16.50 credits.**"
     )
@@ -274,31 +311,27 @@ if current_df is not None:
     if cum_gpa_uw:
         gap = GMU_THRESHOLD - cum_gpa_uw
         if gap <= 0:
-            st.success(f"✅ **Ben qualifies: {cum_gpa_uw:.3f} ≥ {GMU_THRESHOLD}**")
+            st.success(f"✅ **Qualifies: {cum_gpa_uw:.3f} ≥ {GMU_THRESHOLD}**")
         else:
-            # Calculate what senior year GPA is needed to hit 3.25 overall
             est_senior_credits = 6.5
             pts_needed = GMU_THRESHOLD * (total_credits + est_senior_credits) - (cum_gpa_uw * total_credits)
             needed_senior_gpa = pts_needed / est_senior_credits
             st.error(
-                f"❌ **Does not qualify for guaranteed admission: {cum_gpa_uw:.3f} vs. {GMU_THRESHOLD} needed "
-                f"(gap: {gap:.3f} points)**"
+                f"❌ **Does not qualify: {cum_gpa_uw:.3f} vs. {GMU_THRESHOLD} needed "
+                f"(gap: {gap:.3f} pts)**"
             )
             st.info(
                 f"To reach {GMU_THRESHOLD} cumulative after senior year (~{est_senior_credits} credits): "
-                f"Ben would need a **{needed_senior_gpa:.2f} GPA senior year** — essentially straight A's. "
+                f"needs **{needed_senior_gpa:.2f} GPA senior year** — essentially straight A's. "
                 f"NOVA → GMU transfer (3.0 at NOVA) is the more realistic path."
             )
 
     st.markdown("---")
 
-    # ── VCCS Fallback Path ───────────────────────────────────────────────────
     st.header("\U0001f4cb VCCS Guaranteed Admission — Fallback via NOVA")
     st.caption(
-        "If Ben doesn't hit the GMU direct-admission threshold, he can enroll at NOVA "
-        "(Northern Virginia Community College — cheaper, closer) → complete AA/AS → "
-        "transfer to a Virginia 4-year school with guaranteed admission. "
-        "The GPA requirement below applies to credits earned AT NOVA, not HS GPA."
+        "Enroll at NOVA → complete AA/AS → transfer to a 4-year VA school with guaranteed admission. "
+        "The GPA below applies to credits earned AT NOVA, not HS GPA."
     )
 
     gaa_rows = []
@@ -312,13 +345,13 @@ if current_df is not None:
                          "Status": status, "Notes": s["notes"]})
     st.dataframe(pd.DataFrame(gaa_rows), hide_index=True, use_container_width=True)
     st.caption(
-        "Virginia Tech requires 3.2+ and is the hardest bar. GMU via VCCS needs only 3.0 at NOVA — "
-        "easier bar than the direct HS admission threshold, and NOVA credits are cheap."
+        "GMU via VCCS needs only 3.0 at NOVA — easier bar than the 3.25 direct HS admission threshold."
     )
 
     st.markdown("---")
 
-    # ── Certification Payouts ────────────────────────────────────────────────
+# ── Certification Payouts ──────────────────────────────────────────────────────
+if selected_id == "ben":
     st.header("\U0001f3c6 Certification Payouts")
     c1, c2 = st.columns(2)
     with c1:
@@ -329,6 +362,3 @@ if current_df is not None:
         st.subheader("Security+ Bonus")
         st.metric("Potential", "$1,000.00")
         st.progress(0.0, text="Queued")
-
-else:
-    st.info("Syncing grades from ParentVUE email...")

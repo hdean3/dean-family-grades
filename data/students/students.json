@@ -1,0 +1,42 @@
+{
+  "ben": {
+    "name": "Ben Dean",
+    "school": "Stone Bridge HS",
+    "grade_label": "12th Grade (Senior 2026-2027)",
+    "active": true,
+    "rates": {"A+": 150.0, "A": 125.0, "A-": 100.0, "B+": 75.0, "B": 50.0, "B-": 25.0},
+    "gmu_threshold": 3.25
+  },
+  "bailey": {
+    "name": "Bailey Dean",
+    "school": "Trailside Middle School",
+    "grade_label": "6th Grade (2026-2027)",
+    "active": false,
+    "rates": {"A+": 150.0, "A": 125.0, "A-": 100.0, "B+": 75.0, "B": 50.0, "B-": 25.0},
+    "gmu_threshold": null
+  },
+  "riley": {
+    "name": "Riley Dean",
+    "school": "Elementary",
+    "grade_label": "Elementary (2026-2027)",
+    "active": false,
+    "rates": {"A+": 50.0, "A": 40.0, "A-": 30.0, "B+": 20.0, "B": 10.0, "B-": 5.0},
+    "gmu_threshold": null
+  },
+  "darby": {
+    "name": "Darby Dean",
+    "school": "TBD",
+    "grade_label": "Pre-K",
+    "active": false,
+    "rates": {},
+    "gmu_threshold": null
+  },
+  "luke": {
+    "name": "Luke Dean",
+    "school": "TBD",
+    "grade_label": "Pre-K",
+    "active": false,
+    "rates": {},
+    "gmu_threshold": null
+  }
+}
