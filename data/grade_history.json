@@ -1,36 +1,53 @@
 [
   {
+    "year": "2022-2023",
+    "grade_level": 8,
+    "label": "8th Grade (Trailside MS — counts toward HS GPA)",
+    "courses": [
+      {"subject": "Algebra I",             "score": 84, "credits": 1.0, "honors": false, "note": "B"},
+      {"subject": "Tech of Robotic Design", "score": 95, "credits": 1.0, "honors": false, "note": "A"}
+    ]
+  },
+  {
     "year": "2023-2024",
     "grade_level": 9,
-    "label": "9th Grade",
-    "note": "Pull from ParentVue Documents → Year End Report Card (06/24/2024)",
-    "courses": []
+    "label": "9th Grade (Stone Bridge HS)",
+    "courses": [
+      {"subject": "English 9A",              "score": 74, "credits": 1.0, "honors": false, "note": "C"},
+      {"subject": "Spanish I",               "score": 88, "credits": 1.0, "honors": false, "note": "B+"},
+      {"subject": "Health & PE 9",           "score": 95, "credits": 1.0, "honors": false, "note": "A"},
+      {"subject": "Geometry",                "score": 81, "credits": 1.0, "honors": false, "note": "B-"},
+      {"subject": "Research Biology H",      "score": 74, "credits": 1.0, "honors": true,  "note": "C (Honors)"},
+      {"subject": "WH/Geo to 1500 A",        "score": 88, "credits": 1.0, "honors": false, "note": "B+"},
+      {"subject": "PLTW Intro to Eng Dsgn H","score": 95, "credits": 1.0, "honors": true,  "note": "A (Honors)"}
+    ]
   },
   {
     "year": "2024-2025",
     "grade_level": 10,
-    "label": "10th Grade",
+    "label": "10th Grade (Stone Bridge HS + Virtual Loudoun)",
     "courses": [
+      {"subject": "English 10A",             "score": 78, "credits": 1.0, "honors": false, "note": "C+"},
+      {"subject": "Health & PE 10",          "score": 99, "credits": 1.0, "honors": false, "note": "A+"},
       {"subject": "Algebra II",              "score": 64, "credits": 1.0, "honors": false, "note": "D"},
       {"subject": "Chemistry",               "score": 78, "credits": 1.0, "honors": false, "note": "C+"},
-      {"subject": "Health & PE 10",          "score": 99, "credits": 0.5, "honors": false, "note": "A+"},
-      {"subject": "PLTW Principles of Eng",  "score": 95, "credits": 1.0, "honors": true,  "note": "A — Honors (+0.5 weighted)"},
-      {"subject": "English 10A",             "score": 78, "credits": 1.0, "honors": false, "note": "C+"},
-      {"subject": "WH/Geo 1500-Present",     "score": 91, "credits": 1.0, "honors": false, "note": "A-"},
-      {"subject": "Spanish II Virtual",      "score": 95, "credits": 1.0, "honors": false, "note": "A (Edgenuity)"}
+      {"subject": "WH/Geo 1500-Present A",   "score": 91, "credits": 1.0, "honors": false, "note": "A-"},
+      {"subject": "PLTW Principles of Eng H","score": 95, "credits": 1.0, "honors": true,  "note": "A (Honors)"},
+      {"subject": "Spanish II Virtual",      "score": 95, "credits": 1.0, "honors": false, "note": "A (Virtual Loudoun)"}
     ]
   },
   {
     "year": "2025-2026",
     "grade_level": 11,
-    "label": "11th Grade",
+    "label": "11th Grade (Stone Bridge HS)",
     "courses": [
-      {"subject": "Env Science",         "score": 81, "credits": 1.0, "honors": false, "note": "B-"},
-      {"subject": "Personal Finance Sem","score": 83, "credits": 0.5, "honors": false, "note": "B (semester)"},
-      {"subject": "US & VA History A",   "score": 94, "credits": 1.0, "honors": false, "note": "A"},
-      {"subject": "Data Science",        "score": 81, "credits": 1.0, "honors": false, "note": "B-"},
-      {"subject": "English 11A",         "score": 84, "credits": 1.0, "honors": false, "note": "B"},
-      {"subject": "Aerospace Science I", "score": 98, "credits": 0.5, "honors": false, "note": "A+ (semester)"}
+      {"subject": "Economics Sem",       "score": 84, "credits": 0.5, "honors": false, "note": "B (completed S1)"},
+      {"subject": "Env Science",         "score": 81, "credits": 1.0, "honors": false, "note": "B- (final)"},
+      {"subject": "Personal Finance Sem","score": 83, "credits": 0.5, "honors": false, "note": "B (final)"},
+      {"subject": "US & VA History A",   "score": 94, "credits": 1.0, "honors": false, "note": "A (final)"},
+      {"subject": "Data Science",        "score": 81, "credits": 1.0, "honors": false, "note": "B- (final)"},
+      {"subject": "English 11A",         "score": 84, "credits": 1.0, "honors": false, "note": "B (final)"},
+      {"subject": "Aerospace Science I", "score": 99, "credits": 0.5, "honors": false, "note": "A+ (final)"}
     ]
   }
 ]

@@ -26,8 +26,9 @@ VCCS_SCHOOLS = [
 
 # LCPS official grading scale (Stone Bridge HS / Loudoun County)
 def score_to_letter_and_gpa(score):
-    """Full LCPS scale — used for GPA calculations across all years."""
-    if score >= 98: return "A+", 4.0
+    """Official LCPS grading scale (Stone Bridge HS).
+    NOTE: A+ = 4.3 in LCPS, not 4.0 — verified from official transcript grading scale."""
+    if score >= 98: return "A+", 4.3
     if score >= 93: return "A",  4.0
     if score >= 90: return "A-", 3.7
     if score >= 87: return "B+", 3.3
@@ -265,10 +266,9 @@ if current_df is not None:
     # ── GMU Guaranteed Admission ─────────────────────────────────────────────
     st.header("\U0001f3eb GMU Guaranteed Admission — Direct Freshman Path")
     st.markdown(
-        f"**George Mason University guarantees freshman admission to Virginia HS students "
-        f"with a cumulative GPA ≥ {GMU_THRESHOLD} by end of junior year.** "
-        f"Ben just finished junior year — this window has closed for evaluation. "
-        f"The cumulative GPA he carries into senior year IS his qualifying GPA."
+        f"**GMU guarantees freshman admission to Virginia HS students with cumulative GPA ≥ {GMU_THRESHOLD} "
+        f"by end of junior year.** Ben just finished junior year — this is the evaluation point. "
+        f"Official LCPS transcript GPA as of Feb 12, 2026 (mid-junior year): **3.18 / 16.50 credits.**"
     )
 
     if cum_gpa_uw:
@@ -276,10 +276,18 @@ if current_df is not None:
         if gap <= 0:
             st.success(f"✅ **Ben qualifies: {cum_gpa_uw:.3f} ≥ {GMU_THRESHOLD}**")
         else:
+            # Calculate what senior year GPA is needed to hit 3.25 overall
+            est_senior_credits = 6.5
+            pts_needed = GMU_THRESHOLD * (total_credits + est_senior_credits) - (cum_gpa_uw * total_credits)
+            needed_senior_gpa = pts_needed / est_senior_credits
             st.error(
-                f"❌ **Ben does not yet qualify: {cum_gpa_uw:.3f} vs. {GMU_THRESHOLD} needed "
-                f"(gap: {gap:.3f})**\n\n"
-                f"Note: this calculation uses 10th + 11th grade only. 9th grade data may change this."
+                f"❌ **Does not qualify for guaranteed admission: {cum_gpa_uw:.3f} vs. {GMU_THRESHOLD} needed "
+                f"(gap: {gap:.3f} points)**"
+            )
+            st.info(
+                f"To reach {GMU_THRESHOLD} cumulative after senior year (~{est_senior_credits} credits): "
+                f"Ben would need a **{needed_senior_gpa:.2f} GPA senior year** — essentially straight A's. "
+                f"NOVA → GMU transfer (3.0 at NOVA) is the more realistic path."
             )
 
     st.markdown("---")
