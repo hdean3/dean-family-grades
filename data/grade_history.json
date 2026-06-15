@@ -1,0 +1,41 @@
+[
+  {
+    "year": "2023-2024",
+    "grade_level": 9,
+    "label": "9th Grade",
+    "courses": [
+      {"subject": "English 9", "score": 0, "credits": 1.0},
+      {"subject": "Algebra I / Geometry", "score": 0, "credits": 1.0},
+      {"subject": "World History & Geography I", "score": 0, "credits": 1.0},
+      {"subject": "Biology", "score": 0, "credits": 1.0},
+      {"subject": "Spanish I", "score": 0, "credits": 1.0},
+      {"subject": "Elective", "score": 0, "credits": 0.5}
+    ]
+  },
+  {
+    "year": "2024-2025",
+    "grade_level": 10,
+    "label": "10th Grade",
+    "courses": [
+      {"subject": "English 10", "score": 0, "credits": 1.0},
+      {"subject": "Algebra II", "score": 0, "credits": 1.0},
+      {"subject": "World History & Geography II", "score": 0, "credits": 1.0},
+      {"subject": "Chemistry", "score": 0, "credits": 1.0},
+      {"subject": "Spanish II", "score": 0, "credits": 1.0},
+      {"subject": "Elective", "score": 0, "credits": 0.5}
+    ]
+  },
+  {
+    "year": "2025-2026",
+    "grade_level": 11,
+    "label": "11th Grade",
+    "courses": [
+      {"subject": "Env Science", "score": 81, "credits": 1.0},
+      {"subject": "Personal Finance Sem", "score": 83, "credits": 0.5},
+      {"subject": "US & VA History A", "score": 94, "credits": 1.0},
+      {"subject": "Data Science", "score": 81, "credits": 1.0},
+      {"subject": "English 11A", "score": 84, "credits": 1.0},
+      {"subject": "Aerospace Science I", "score": 98, "credits": 0.5}
+    ]
+  }
+]
