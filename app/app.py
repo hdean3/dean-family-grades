@@ -199,7 +199,7 @@ if current_df is not None and not current_df.empty:
     # ── Summary metrics ────────────────────────────────────────────────────────
     avg_score   = current_df['score'].mean()
     _, _, gpa_v = get_grade_info(avg_score)
-    gpa_label   = "Cumul. GPA (UW)" if cum_gpa_uw else "Cumul. GPA"
+    gpa_label   = "Cumulative GPA"
 
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Current Earnings", f"${current_df['Earnings'].sum():,.2f}")
@@ -208,7 +208,7 @@ if current_df is not None and not current_df.empty:
     if cum_gpa_uw:
         m4.metric(gpa_label, f"{cum_gpa_uw:.3f}",
                   delta=f"{'✅' if (GMU_THRESHOLD and cum_gpa_uw >= GMU_THRESHOLD) else ('⚠️ ' + str(GMU_THRESHOLD) + ' GMU' if GMU_THRESHOLD else '')}")
-        m5.metric("Cumul. GPA (W)", f"{cum_gpa_w:.3f}", help="Weighted: Honors +0.5, AP +1.0")
+        m5.metric("Weighted GPA", f"{cum_gpa_w:.3f}", help="Weighted: Honors +0.5, AP +1.0")
     else:
         m4.metric("Cumul. GPA", "—")
         m5.metric("GMU Target", f"{GMU_THRESHOLD}" if GMU_THRESHOLD else "N/A")
@@ -260,7 +260,7 @@ if history:
 
         yr_gpa_uw = compute_year_gpa(courses, weighted=False)
         yr_gpa_w  = compute_year_gpa(courses, weighted=True)
-        gpa_str   = f"UW: {yr_gpa_uw:.3f}  |  W: {yr_gpa_w:.3f}" if yr_gpa_uw else "—"
+        gpa_str   = f"Unweighted: {yr_gpa_uw:.3f}  |  Weighted: {yr_gpa_w:.3f}" if yr_gpa_uw else "—"
         st.subheader(f"{label} — GPA {gpa_str}")
 
         rows = []
