@@ -181,18 +181,27 @@ if current_df is not None and not current_df.empty:
     # ── Sidebar: Motivation Simulator ─────────────────────────────────────────
     st.sidebar.markdown("---")
     st.sidebar.header("\U0001f680 Motivation Simulator")
-    st.sidebar.caption("Drag to see how improving each class changes earnings:")
-    boosts = {}
+    st.sidebar.caption("Drag right from your current grade to see what a bump earns:")
+    sim_scores = {}
     for _, row in current_df.iterrows():
-        label = row['subject'][:24] + ('…' if len(row['subject']) > 24 else '')
-        boosts[row['subject']] = st.sidebar.slider(label, 0, 15, 0, key=f"boost_{row['subject']}")
+        base        = int(row['score'])
+        base_letter, _, _ = get_grade_info(base)
+        lbl         = row['subject'][:20] + ('…' if len(row['subject']) > 20 else '')
+        sim_scores[row['subject']] = st.sidebar.slider(
+            f"{lbl}  [{base_letter} · {base}]",
+            min_value=max(60, base - 5),
+            max_value=100,
+            value=base,
+            key=f"sim_{row['subject']}",
+        )
 
     if selected_id == "ben":
         st.sidebar.markdown("---")
         st.sidebar.warning("\U0001f9b7 **Reminder**: Ben, put the bands on your braces!")
 
-    current_df['boost']         = current_df['subject'].map(boosts)
-    current_df['Display Score'] = (current_df['score'] + current_df['boost']).clip(upper=100)
+    current_df['Display Score'] = (
+        current_df['subject'].map(sim_scores).fillna(current_df['score']).clip(upper=100).astype(int)
+    )
     grade_data = current_df['Display Score'].apply(get_grade_info)
     current_df['Grade'], current_df['Earnings'], current_df['Points'] = zip(*grade_data)
 
