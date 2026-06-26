@@ -47,7 +47,7 @@
       {"subject": "US & VA History A",   "score": 94, "credits": 1.0, "honors": false, "note": "A (final)"},
       {"subject": "Data Science",        "score": 81, "credits": 1.0, "honors": false, "note": "B- (final)"},
       {"subject": "English 11A",         "score": 84, "credits": 1.0, "honors": false, "note": "B (final)"},
-      {"subject": "Aerospace Science I", "score": 99, "credits": 0.5, "honors": false, "note": "A+ (final)"}
+      {"subject": "Aerospace Science I", "score": 98, "credits": 0.5, "honors": false, "note": "A+ (final)"}
     ]
   }
 ]
